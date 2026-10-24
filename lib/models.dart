@@ -239,7 +239,6 @@ class StapleStock {
     this.memo,
   });
 
-  // brand + model + length + mark で StapleID を自動生成 (例: Chiarugi246ah)
   String get stapleId => '$brand$model$length$mark';
 
   String get displayTitle => '[$stapleId] $brand $model ($length - $mark)';
@@ -272,13 +271,13 @@ class StapleStock {
 // ==========================================
 class TiedStock {
   final String id;
-  final String stapleId;    // 関連付けるStapleのID (例: Chiarugi246ah)
-  final String shapedCode;   // 関連付ける舟形ケーンのコード (例: S01-Rig2503)
-  final String shapedTitle;  // 舟形ケーンの情報 (例: Rigotti 202503 H39)
-  final String tiedDate;     // 糸巻き日 (YYYY-MM-DD)
-  String totalLength;        // 糸巻き全長 (例: 73.0mm)
-  String? threadColor;       // 糸の色・種類 (任意)
-  String? memo;              // メモ
+  final String stapleId;
+  final String shapedCode;
+  final String shapedTitle;
+  final String tiedDate;
+  String totalLength;
+  String? threadColor;
+  String? memo;
 
   TiedStock({
     required this.id,
@@ -311,5 +310,126 @@ class TiedStock {
         totalLength: json['totalLength'] ?? '73.0',
         threadColor: json['threadColor'],
         memo: json['memo'],
+      );
+}
+
+// ==========================================
+// 日々の削り・試奏ログモデル (dateを編集可能に修正)
+// ==========================================
+class ScrapeLog {
+  final String id;
+  String date;                // 記録日 (YYYY-MM-DD)
+  String? totalLength;        // その時点の全長 (例: 71.5mm)
+  String? scrapeLength;       // スクレープ長 (例: 10.5mm)
+  String? pitchRating;        // ピッチ/音程評価
+  String? resistanceRating;   // 抵抗感
+  String? memo;               // メモ
+
+  ScrapeLog({
+    required this.id,
+    required this.date,
+    this.totalLength,
+    this.scrapeLength,
+    this.pitchRating,
+    this.resistanceRating,
+    this.memo,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'date': date,
+        'totalLength': totalLength,
+        'scrapeLength': scrapeLength,
+        'pitchRating': pitchRating,
+        'resistanceRating': resistanceRating,
+        'memo': memo,
+      };
+
+  factory ScrapeLog.fromJson(Map<String, dynamic> json) => ScrapeLog(
+        id: json['id'] ?? DateTime.now().toString(),
+        date: json['date'] ?? DateTime.now().toString().split(' ')[0],
+        totalLength: json['totalLength'],
+        scrapeLength: json['scrapeLength'],
+        pitchRating: json['pitchRating'],
+        resistanceRating: json['resistanceRating'],
+        memo: json['memo'],
+      );
+}
+
+// ==========================================
+// 進行状況（作業ステータス）の定義（3段階に再編）
+// ==========================================
+enum LeadStage {
+  cutAndRough, // 1. 荒削り・調整中
+  usable,      // 2. 実用（使える状態）
+  retired,     // 3. 引退・分解済
+}
+
+extension LeadStageExtension on LeadStage {
+  String get label {
+    switch (this) {
+      case LeadStage.cutAndRough:
+        return '1. 荒削り・調整中';
+      case LeadStage.usable:
+        return '2. 実用（使える状態）';
+      case LeadStage.retired:
+        return '3. 引退・分解済';
+    }
+  }
+}
+
+// ==========================================
+// 調整中・完成リードモデル (qualityLevelを追加)
+// ==========================================
+class WorkLead {
+  final String id;
+  final String stapleId;
+  final String shapedCode;
+  final String shapedTitle;
+  final String tiedDate;
+  LeadStage stage;           // 現在のステータス
+  String currentTotalLength; // 現在の全長
+  int qualityLevel;          // コンディションレベル (0〜5)
+  List<ScrapeLog> logs;      // 履歴リスト
+
+  WorkLead({
+    required this.id,
+    required this.stapleId,
+    required this.shapedCode,
+    required this.shapedTitle,
+    required this.tiedDate,
+    required this.stage,
+    required this.currentTotalLength,
+    this.qualityLevel = 3, // デフォルトレベル3
+    required this.logs,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'stapleId': stapleId,
+        'shapedCode': shapedCode,
+        'shapedTitle': shapedTitle,
+        'tiedDate': tiedDate,
+        'stage': stage.name,
+        'currentTotalLength': currentTotalLength,
+        'qualityLevel': qualityLevel,
+        'logs': logs.map((e) => e.toJson()).toList(),
+      };
+
+  factory WorkLead.fromJson(Map<String, dynamic> json) => WorkLead(
+        id: json['id'] ?? DateTime.now().toString(),
+        stapleId: json['stapleId'] ?? '',
+        shapedCode: json['shapedCode'] ?? '',
+        shapedTitle: json['shapedTitle'] ?? '',
+        tiedDate: json['tiedDate'] ?? '',
+        stage: LeadStage.values.firstWhere(
+          (e) => e.name == json['stage'],
+          orElse: () => LeadStage.cutAndRough,
+        ),
+        currentTotalLength: json['currentTotalLength'] ?? '71.0',
+        qualityLevel: json['qualityLevel'] ?? 3,
+        logs: (json['logs'] as List? ?? [])
+            .map((e) => ScrapeLog.fromJson(e))
+            .toList(),
       );
 }
