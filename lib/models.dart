@@ -356,30 +356,10 @@ class ScrapeLog {
       );
 }
 
-// ==========================================
-// 進行状況（作業ステータス）の定義（3段階に再編）
-// ==========================================
-enum LeadStage {
-  cutAndRough, // 1. 荒削り・調整中
-  usable,      // 2. 実用（使える状態）
-  retired,     // 3. 引退・分解済
-}
 
-extension LeadStageExtension on LeadStage {
-  String get label {
-    switch (this) {
-      case LeadStage.cutAndRough:
-        return '1. 荒削り・調整中';
-      case LeadStage.usable:
-        return '2. 実用（使える状態）';
-      case LeadStage.retired:
-        return '3. 引退・分解済';
-    }
-  }
-}
 
 // ==========================================
-// 調整中・完成リードモデル (qualityLevelを追加)
+// 調整中・完成リードモデル (stageを廃止し、qualityLevel主導に変更)
 // ==========================================
 class WorkLead {
   final String id;
@@ -387,7 +367,6 @@ class WorkLead {
   final String shapedCode;
   final String shapedTitle;
   final String tiedDate;
-  LeadStage stage;           // 現在のステータス
   String currentTotalLength; // 現在の全長
   int qualityLevel;          // コンディションレベル (0〜5)
   List<ScrapeLog> logs;      // 履歴リスト
@@ -398,9 +377,8 @@ class WorkLead {
     required this.shapedCode,
     required this.shapedTitle,
     required this.tiedDate,
-    required this.stage,
     required this.currentTotalLength,
-    this.qualityLevel = 3, // デフォルトレベル3
+    this.qualityLevel = 1, // デフォルトLv.1
     required this.logs,
   });
 
@@ -410,7 +388,6 @@ class WorkLead {
         'shapedCode': shapedCode,
         'shapedTitle': shapedTitle,
         'tiedDate': tiedDate,
-        'stage': stage.name,
         'currentTotalLength': currentTotalLength,
         'qualityLevel': qualityLevel,
         'logs': logs.map((e) => e.toJson()).toList(),
@@ -422,12 +399,8 @@ class WorkLead {
         shapedCode: json['shapedCode'] ?? '',
         shapedTitle: json['shapedTitle'] ?? '',
         tiedDate: json['tiedDate'] ?? '',
-        stage: LeadStage.values.firstWhere(
-          (e) => e.name == json['stage'],
-          orElse: () => LeadStage.cutAndRough,
-        ),
         currentTotalLength: json['currentTotalLength'] ?? '71.0',
-        qualityLevel: json['qualityLevel'] ?? 3,
+        qualityLevel: json['qualityLevel'] ?? 1,
         logs: (json['logs'] as List? ?? [])
             .map((e) => ScrapeLog.fromJson(e))
             .toList(),
