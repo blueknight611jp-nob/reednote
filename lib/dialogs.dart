@@ -739,4 +739,408 @@ class StockDialogs {
       ),
     );
   }
+
+
+  // ==========================================
+  // Staple (チューブ) 管理ダイアログ群
+  // ==========================================
+
+  static void showAddStapleDialog({
+    required BuildContext context,
+    required List<String> existingBrands,
+    required Function(List<StapleStock> newStaples) onRegistered,
+  }) {
+    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Chiarugi';
+    final modelCtrl = TextEditingController(text: '2');
+    final lengthCtrl = TextEditingController(text: '46'); // 単位なし
+    final materialCtrl = TextEditingController(text: 'Brass');
+    final startMarkCtrl = TextEditingController(text: 'a');
+    final endMarkCtrl = TextEditingController(text: 'z');
+    final singleMarkCtrl = TextEditingController(text: 'a');
+    final memoCtrl = TextEditingController();
+    bool isBatchMode = true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          // プレビューID (例: Chiarugi246a)
+          String previewId = isBatchMode
+              ? '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${startMarkCtrl.text}〜'
+              : '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${singleMarkCtrl.text}';
+
+          return AlertDialog(
+            title: const Text('チューブ (Staple) の新規登録'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  buildBrandAutocomplete(
+                    options: existingBrands.isEmpty ? ['Chiarugi', 'Rigotti', 'Loree', 'Glotin', 'Guercio'] : existingBrands,
+                    initialValue: selectedBrand,
+                    onSelected: (val) {
+                      setState(() => selectedBrand = val);
+                    },
+                  ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: modelCtrl,
+                          decoration: const InputDecoration(labelText: 'モデル (例: 2)'),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: lengthCtrl,
+                          decoration: const InputDecoration(labelText: '全長数値 (例: 46)'),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
+                  ),
+                  TextField(
+                    controller: materialCtrl,
+                    decoration: const InputDecoration(labelText: '材質'),
+                  ),
+                  const SizedBox(height: 12),
+                  SwitchListTile(
+                    title: const Text('マークを連番で一括生成 (a〜z等)'),
+                    value: isBatchMode,
+                    contentPadding: EdgeInsets.zero,
+                    onChanged: (val) => setState(() => isBatchMode = val),
+                  ),
+                  if (isBatchMode) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: startMarkCtrl,
+                            decoration: const InputDecoration(labelText: '開始マーク (例: a)'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 8.0),
+                          child: Text('〜'),
+                        ),
+                        Expanded(
+                          child: TextField(
+                            controller: endMarkCtrl,
+                            decoration: const InputDecoration(labelText: '終了マーク (例: ah)'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    TextField(
+                      controller: singleMarkCtrl,
+                      decoration: const InputDecoration(labelText: '個体マーク (例: ah)'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  Text('ID生成プレビュー: $previewId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  TextField(
+                    controller: memoCtrl,
+                    decoration: const InputDecoration(labelText: 'メモ'),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+              ElevatedButton(
+                onPressed: () {
+                  final List<StapleStock> generatedList = [];
+                  final now = DateTime.now();
+
+                  if (isBatchMode) {
+                    final start = startMarkCtrl.text.trim().toLowerCase();
+                    final end = endMarkCtrl.text.trim().toLowerCase();
+                    final marks = _generateLetterSequence(start, end);
+
+                    for (int i = 0; i < marks.length; i++) {
+                      generatedList.add(StapleStock(
+                        id: '${now.millisecondsSinceEpoch}_$i',
+                        brand: selectedBrand,
+                        model: modelCtrl.text,
+                        length: lengthCtrl.text,
+                        mark: marks[i],
+                        material: materialCtrl.text,
+                        memo: memoCtrl.text.isEmpty ? null : memoCtrl.text,
+                      ));
+                    }
+                  } else {
+                    generatedList.add(StapleStock(
+                      id: now.toString(),
+                      brand: selectedBrand,
+                      model: modelCtrl.text,
+                      length: lengthCtrl.text,
+                      mark: singleMarkCtrl.text.trim(),
+                      material: materialCtrl.text,
+                      memo: memoCtrl.text.isEmpty ? null : memoCtrl.text,
+                    ));
+                  }
+
+                  onRegistered(generatedList);
+                  Navigator.pop(context);
+                },
+                child: Text(isBatchMode ? '一括登録' : '登録'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  static void showEditStapleDialog({
+    required BuildContext context,
+    required StapleStock staple,
+    required List<String> existingBrands,
+    required VoidCallback onSaved,
+  }) {
+    String selectedBrand = staple.brand;
+    final modelCtrl = TextEditingController(text: staple.model);
+    final lengthCtrl = TextEditingController(text: staple.length);
+    final markCtrl = TextEditingController(text: staple.mark);
+    final materialCtrl = TextEditingController(text: staple.material);
+    final memoCtrl = TextEditingController(text: staple.memo ?? '');
+    StapleStatus selectedStatus = staple.status;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          String currentIdPreview = '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${markCtrl.text}';
+
+          return AlertDialog(
+            title: Text('Staple [$currentIdPreview] の編集'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  buildBrandAutocomplete(
+                    options: existingBrands,
+                    initialValue: selectedBrand,
+                    onSelected: (val) => setState(() => selectedBrand = val),
+                  ),
+                  Row(
+                    children: [
+                      Expanded(child: TextField(controller: modelCtrl, decoration: const InputDecoration(labelText: 'モデル'), onChanged: (_) => setState(() {}))),
+                      const SizedBox(width: 8),
+                      Expanded(child: TextField(controller: lengthCtrl, decoration: const InputDecoration(labelText: '全長数値'), onChanged: (_) => setState(() {}))),
+                    ],
+                  ),
+                  TextField(controller: markCtrl, decoration: const InputDecoration(labelText: '個体マーク (例: ah)'), onChanged: (_) => setState(() {})),
+                  TextField(controller: materialCtrl, decoration: const InputDecoration(labelText: '材質')),
+                  DropdownButtonFormField<StapleStatus>(
+                    value: selectedStatus,
+                    decoration: const InputDecoration(labelText: 'ステータス'),
+                    items: StapleStatus.values.map((status) {
+                      return DropdownMenuItem(
+                        value: status,
+                        child: Text(status.label),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedStatus = val);
+                    },
+                  ),
+                  TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+              ElevatedButton(
+                onPressed: () {
+                  staple.brand = selectedBrand;
+                  staple.model = modelCtrl.text;
+                  staple.length = lengthCtrl.text;
+                  staple.mark = markCtrl.text.trim();
+                  staple.material = materialCtrl.text;
+                  staple.status = selectedStatus;
+                  staple.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
+                  onSaved();
+                  Navigator.pop(context);
+                },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // アルファベット連番生成用ヘルパー (a..z, aa..az, ah 等に対応)
+  static List<String> _generateLetterSequence(String start, String end) {
+    List<String> result = [];
+    int startVal = _letterToVal(start);
+    int endVal = _letterToVal(end);
+
+    if (startVal > endVal) return [start];
+
+    for (int i = startVal; i <= endVal; i++) {
+      result.add(_valToLetter(i));
+    }
+    return result;
+  }
+
+  static int _letterToVal(String str) {
+    int val = 0;
+    for (int i = 0; i < str.length; i++) {
+      val = val * 26 + (str.codeUnitAt(i) - 'a'.codeUnitAt(0) + 1);
+    }
+    return val;
+  }
+
+  static String _valToLetter(int val) {
+    String res = '';
+    while (val > 0) {
+      int rem = (val - 1) % 26;
+      res = String.fromCharCode('a'.codeUnitAt(0) + rem) + res;
+      val = (val - 1) ~/ 26;
+    }
+    return res;
+  }
+
+  // ==========================================
+  // 舟形ケーン -> 糸巻き(Tied) 加工ダイアログ
+  // ==========================================
+  static void showProcessShapedToTiedDialog({
+    required BuildContext context,
+    required ShapedCaneStock shaped,
+    required List<StapleStock> availableStaples, // 未使用(unused)のチューブ一覧
+    required Function(TiedStock newTied, StapleStock selectedStaple) onProcessed,
+  }) {
+    if (availableStaples.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('未使用のチューブがありません'),
+          content: const Text('糸巻きに使用できる「未使用(unused)」のチューブ(Staple)がストックにありません。先にチューブを登録してください。'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    StapleStock selectedStaple = availableStaples.first;
+    final lengthController = TextEditingController(text: '73.0');
+    final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
+    final threadController = TextEditingController();
+    final memoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text('糸巻き(Tying)登録 - ${shaped.code}'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    
+                    // 使用するチューブを選択
+                    DropdownButtonFormField<StapleStock>(
+                      value: selectedStaple,
+                      decoration: const InputDecoration(labelText: '使用するチューブ (Staple)'),
+                      
+                      // 1. 選択されたあとの表示（ボックス内の文字）を大きくする
+                      style: const TextStyle(
+                        fontSize: 16, // お好みのサイズ（例: 16 や 18）
+                        color: Colors.black,
+                      ),
+
+                      items: availableStaples.map((staple) {
+                        return DropdownMenuItem<StapleStock>(
+                          value: staple,
+                          // 2. プルダウンを開いたときのリスト内の文字を大きくする
+                          child: Text(
+                            '${staple.brand} ${staple.model} (${staple.length}) ${staple.mark}',
+                            style: const TextStyle(fontSize: 16), // リスト側のフォントサイズ
+                          ),
+                        );
+                      }).toList(),
+
+                      onChanged: (val) {
+                        if (val != null) setState(() => selectedStaple = val);
+                      },
+                    ),
+
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: lengthController,
+                      decoration: const InputDecoration(
+                        labelText: '糸巻き全長 (mm)',
+                        hintText: '73.0',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: dateController,
+                      decoration: const InputDecoration(labelText: '糸巻き日 (YYYY-MM-DD)'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: threadController,
+                      decoration: const InputDecoration(
+                        labelText: '糸の色・種類 (任意)',
+                        hintText: 'Blue, Greenなど',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: memoController,
+                      decoration: const InputDecoration(labelText: 'メモ'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('キャンセル'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final newTied = TiedStock(
+                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      stapleId: selectedStaple.stapleId,
+                      shapedCode: shaped.code,
+                      shapedTitle: shaped.displayTitle,
+                      tiedDate: dateController.text,
+                      totalLength: lengthController.text.isEmpty ? '73.0' : lengthController.text,
+                      threadColor: threadController.text.isEmpty ? null : threadController.text,
+                      memo: memoController.text.isEmpty ? null : memoController.text,
+                    );
+
+                    onProcessed(newTied, selectedStaple);
+                    Navigator.pop(context);
+                  },
+                  child: const Text('糸巻き完了'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
 }
