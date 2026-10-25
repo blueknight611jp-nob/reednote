@@ -141,6 +141,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     await prefs.setString('work_leads_data', jsonString);
   }
 
+  // 識別ID生成ヘルパー (例: Chiarugi 2, 46, a -> Chiarugi246a)
+  String _generateStapleId(String model, String length, String mark) {
+    final cleanModel = model.replaceAll(RegExp(r'\s+'), '');
+    final cleanLength = length.replaceAll(RegExp(r'[^0-9]'), '');
+    final cleanMark = mark.trim();
+    return '$cleanModel$cleanLength$cleanMark';
+  }
+
   // 分解確認ダイアログ
   void _confirmAndDismantle(WorkLead lead) {
     showDialog(
@@ -163,6 +171,40 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
               _handleDismantle(lead);
             },
             child: const Text('分解する'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // リード削除確認ダイアログ
+  void _confirmAndDeleteLead(WorkLead lead) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('リードの削除'),
+        content: Text('[${lead.stapleId}] ${lead.shapedTitle}\n\nこのリードを一覧から完全に削除しますか？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              setState(() {
+                _workLeads.remove(lead);
+              });
+              _saveWorkLeads();
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('リードを削除しました')),
+              );
+            },
+            child: const Text('削除する'),
           ),
         ],
       ),
@@ -231,7 +273,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       context: context,
       builder: (context) => Dialog(
         child: Stack(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -251,70 +292,228 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // 市販・完成品リードの追加ダイアログ
-  void _showAddCommercialLeadDialog() {
-    final brandController = TextEditingController();
-    final stapleController = TextEditingController();
-    final lengthController = TextEditingController(text: '71.0');
+  // WorkLead ダイレクト新規登録 ＆ 編集ダイアログ
+  void _showWorkLeadDialog({WorkLead? existingLead}) {
+    // 既存データがある場合は初期値にセット、なければデフォルト
+    String selectedModel = existingLead != null 
+        ? (existingLead.shapedTitle.contains(' ') ? existingLead.shapedTitle.split(' ').first : 'Chiarugi 2') 
+        : 'Chiarugi 2';
+    
+    int qualityLevel = existingLead?.qualityLevel ?? 1;
+    String totalLength = existingLead?.currentTotalLength ?? '71.0';
+    List<String> photos = existingLead != null ? List.from(existingLead.photosBase64) : [];
+
+    final lengthController = TextEditingController(text: '46');
+    final markController = TextEditingController(text: 'a');
+    final totalLengthController = TextEditingController(text: totalLength);
     final memoController = TextEditingController();
-    int selectedLevel = 4;
+
+    // 編集時は既存の stapleId や title から逆算して初期値を設定できれば綺麗に設定
+    if (existingLead != null) {
+      if (existingLead.stapleId.contains('46')) {
+        lengthController.text = '46';
+      } else if (existingLead.stapleId.contains('47')) {
+        lengthController.text = '47';
+      } else if (existingLead.stapleId.contains('45')) {
+        lengthController.text = '45';
+      }
+      if (existingLead.stapleId.isNotEmpty) {
+        markController.text = existingLead.stapleId.substring(existingLead.stapleId.length - 1);
+      }
+    }
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
+            final previewId = _generateStapleId(selectedModel, lengthController.text, markController.text);
+
             return AlertDialog(
-              title: const Text('市販・購入リードを登録'),
+              title: Text(existingLead == null ? 'リードのダイレクト新規登録' : 'リード情報の編集'),
               content: SingleChildScrollView(
                 child: SizedBox(
                   width: 400,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextField(
-                        controller: brandController,
-                        decoration: const InputDecoration(labelText: 'ブランド・製作者名 (例: Rigotti完成品)'),
-                      ),
-                      TextField(
-                        controller: stapleController,
-                        decoration: const InputDecoration(labelText: 'チューブ型番・識別 (例: Chiarugi 2 46)'),
-                      ),
-                      TextField(
-                        controller: lengthController,
-                        decoration: const InputDecoration(labelText: '初期全長 (mm)'),
-                        keyboardType: TextInputType.number,
+                      // モデル選択
+                      DropdownButtonFormField<String>(
+                        value: selectedModel,
+                        decoration: const InputDecoration(labelText: 'ステープルモデル'),
+                        items: ['Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree', 'Other']
+                            .map((m) => DropdownMenuItem(value: m, child: Text(m)))
+                            .toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() => selectedModel = val);
+                          }
+                        },
                       ),
                       const SizedBox(height: 12),
+                      
+                      // 長さ選択 (クイックチップ + カスタム入力)
                       Row(
                         children: [
-                          const Text('初期レベル: '),
+                          Expanded(
+                            child: TextField(
+                              controller: lengthController,
+                              decoration: const InputDecoration(labelText: '長さ (mm)'),
+                              keyboardType: TextInputType.number,
+                              onChanged: (_) => setDialogState(() {}),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          ChoiceChip(
+                            label: const Text('46'),
+                            selected: lengthController.text == '46',
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => lengthController.text = '46');
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          ChoiceChip(
+                            label: const Text('47'),
+                            selected: lengthController.text == '47',
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => lengthController.text = '47');
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          ChoiceChip(
+                            label: const Text('45'),
+                            selected: lengthController.text == '45',
+                            onSelected: (selected) {
+                              if (selected) setDialogState(() => lengthController.text = '45');
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // マーク入力
+                      TextField(
+                        controller: markController,
+                        decoration: const InputDecoration(labelText: '個体マーク (例: a, b)'),
+                        onChanged: (_) => setDialogState(() {}),
+                      ),
+                      const SizedBox(height: 6),
+                      Text('自動IDプレビュー: $previewId', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+
+                      // 初期レベル
+                      Row(
+                        children: [
+                          const Text('コンディション: '),
                           const SizedBox(width: 8),
                           DropdownButton<int>(
-                            value: selectedLevel,
-                            items: [5, 4, 3].map((lvl) {
+                            value: qualityLevel,
+                            items: [5,4,3,2,1].map((lvl) {
                               return DropdownMenuItem(
                                 value: lvl,
-                                child: Text('Lv. $lvl ${"★" * lvl} (${lvl == 5 ? "1軍・本番OK" : lvl == 4 ? "2軍・結構いける" : "3軍・練習用"})'),
+                                child: Text('Lv. $lvl ${"★" * lvl}'),
                               );
                             }).toList(),
                             onChanged: (val) {
                               if (val != null) {
-                                setDialogState(() => selectedLevel = val);
+                                setDialogState(() => qualityLevel = val);
                               }
                             },
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
+
+                      // 現在の全長
                       TextField(
-                        controller: memoController,
-                        decoration: const InputDecoration(
-                          labelText: '購入メモ (例: 〇〇楽器で購入)',
-                          border: OutlineInputBorder(),
-                        ),
-                        maxLines: 2,
+                        controller: totalLengthController,
+                        decoration: const InputDecoration(labelText: '現在の全長 (mm)'),
+                        keyboardType: TextInputType.number,
                       ),
+                      const SizedBox(height: 12),
+
+                      // 写真管理エリア
+                      const Text('写真管理', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (int i = 0; i < photos.length; i++)
+                            Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Image.memory(
+                                    base64Decode(photos[i].split(',').last),
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: InkWell(
+                                    onTap: () {
+                                      setDialogState(() {
+                                        photos.removeAt(i);
+                                      });
+                                    },
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: const Icon(Icons.close, size: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(50, 50),
+                              padding: EdgeInsets.zero,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(Icons.add_a_photo, size: 16),
+                            label: const Text('追加', style: TextStyle(fontSize: 10)),
+                            onPressed: () async {
+                              final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+                              uploadInput.click();
+                              uploadInput.onChange.listen((e) {
+                                final files = uploadInput.files;
+                                if (files == null || files.isEmpty) return;
+                                final reader = html.FileReader();
+                                reader.onLoadEnd.listen((e) {
+                                  final base64String = reader.result as String?;
+                                  if (base64String != null) {
+                                    setDialogState(() {
+                                      photos.add(base64String);
+                                    });
+                                  }
+                                });
+                                reader.readAsDataUrl(files[0]);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (existingLead == null) ...[
+                        TextField(
+                          controller: memoController,
+                          decoration: const InputDecoration(
+                            labelText: '初期メモ・購入理由など',
+                            border: OutlineInputBorder(),
+                          ),
+                          maxLines: 2,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -326,40 +525,48 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    final brand = brandController.text.trim().isEmpty ? '市販リード' : brandController.text.trim();
-                    final staple = stapleController.text.trim().isEmpty ? 'Com-${DateTime.now().millisecondsSinceEpoch % 1000}' : stapleController.text.trim();
                     final dateStr = DateTime.now().toString().split(' ')[0];
-
-                    final newLead = WorkLead(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      stapleId: staple,
-                      shapedCode: '市販品',
-                      shapedTitle: brand,
-                      tiedDate: dateStr,
-                      currentTotalLength: lengthController.text,
-                      qualityLevel: selectedLevel,
-                      logs: [
-                        if (memoController.text.isNotEmpty)
-                          ScrapeLog(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            date: dateStr,
-                            level: selectedLevel,
-                            totalLength: lengthController.text,
-                            memo: '【購入時】 ${memoController.text}',
-                          ),
-                      ],
-                    );
+                    final shapedTitleText = '$selectedModel ${lengthController.text}mm';
 
                     setState(() {
-                      _workLeads.insert(0, newLead);
+                      if (existingLead == null) {
+                        final newLead = WorkLead(
+                          id: DateTime.now().millisecondsSinceEpoch.toString(),
+                          stapleId: previewId,
+                          shapedCode: 'ダイレクト登録',
+                          shapedTitle: shapedTitleText,
+                          tiedDate: dateStr,
+                          currentTotalLength: totalLengthController.text,
+                          qualityLevel: qualityLevel,
+                          photosBase64: photos,
+                          logs: [
+                            if (memoController.text.isNotEmpty)
+                              ScrapeLog(
+                                id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                date: dateStr,
+                                level: qualityLevel,
+                                totalLength: totalLengthController.text,
+                                memo: '【初期登録】 ${memoController.text}',
+                              ),
+                          ],
+                        );
+                        _workLeads.insert(0, newLead);
+                      } else {
+                        // 既存リードの更新
+                        existingLead.stapleId = previewId;
+                        existingLead.shapedTitle = shapedTitleText;
+                        existingLead.qualityLevel = qualityLevel;
+                        existingLead.currentTotalLength = totalLengthController.text;
+                        existingLead.photosBase64 = photos;
+                      }
                     });
                     _saveWorkLeads();
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('[$brand] をLv.$selectedLevelとして登録しました')),
+                      SnackBar(content: Text(existingLead == null ? '[$previewId] を登録しました' : 'リード情報を更新しました')),
                     );
                   },
-                  child: const Text('登録'),
+                  child: const Text('保存'),
                 ),
               ],
             );
@@ -656,9 +863,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
               foregroundColor: Colors.amber.shade900,
               elevation: 0,
             ),
-            icon: const Icon(Icons.shopping_bag_outlined, size: 18),
-            label: const Text('＋ 市販リードを追加'),
-            onPressed: _showAddCommercialLeadDialog,
+            icon: const Icon(Icons.add_circle_outline, size: 18),
+            label: const Text('＋ ダイレクト登録'),
+            onPressed: () => _showWorkLeadDialog(),
           ),
           const SizedBox(width: 8),
           IconButton(
@@ -722,6 +929,22 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
+                    // 編集・削除ボタン
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 20, color: Colors.blueGrey),
+                      tooltip: 'リード情報を編集',
+                      onPressed: () => _showWorkLeadDialog(existingLead: lead),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                      tooltip: 'リードを削除',
+                      onPressed: () => _confirmAndDeleteLead(lead),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(

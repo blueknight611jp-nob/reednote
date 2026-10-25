@@ -361,19 +361,18 @@ class ScrapeLog {
 }
 
 
-
 // ==========================================
-// 調整中・完成リードモデル (stageを廃止し、qualityLevel主導に変更)
+// 調整中・完成リードモデル 
 // ==========================================
 class WorkLead {
   final String id;
-  final String stapleId;
-  final String shapedCode;
-  final String shapedTitle;
+  String stapleId;         // finalを外す
+  String shapedCode;       // finalを外す
+  String shapedTitle;      // finalを外す
   final String tiedDate;
   String currentTotalLength; // 現在の全長
   int qualityLevel;          // コンディションレベル (0〜5)
-  String? photoBase64;        // ★追加: リードの写真をBase64形式で保持
+  List<String> photosBase64; // 写真複数枚
   List<ScrapeLog> logs;      // 履歴リスト
 
   WorkLead({
@@ -383,10 +382,10 @@ class WorkLead {
     required this.shapedTitle,
     required this.tiedDate,
     required this.currentTotalLength,
-    this.qualityLevel = 1, // デフォルトLv.1
-    this.photoBase64,
+    this.qualityLevel = 1,
+    List<String>? photosBase64,
     required this.logs,
-  });
+  }) : photosBase64 = photosBase64 ?? [];
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -396,20 +395,30 @@ class WorkLead {
         'tiedDate': tiedDate,
         'currentTotalLength': currentTotalLength,
         'qualityLevel': qualityLevel,
-        'photoBase64': photoBase64,
+        'photosBase64': photosBase64,
         'logs': logs.map((e) => e.toJson()).toList(),
       };
 
-  factory WorkLead.fromJson(Map<String, dynamic> json) => WorkLead(
-        id: json['id'] ?? DateTime.now().toString(),
-        stapleId: json['stapleId'] ?? '',
-        shapedCode: json['shapedCode'] ?? '',
-        shapedTitle: json['shapedTitle'] ?? '',
-        tiedDate: json['tiedDate'] ?? '',
-        currentTotalLength: json['currentTotalLength'] ?? '71.0',
-        qualityLevel: json['qualityLevel'] ?? 1,
-        logs: (json['logs'] as List? ?? [])
-            .map((e) => ScrapeLog.fromJson(e))
-            .toList(),
-      );
+  factory WorkLead.fromJson(Map<String, dynamic> json) {
+    List<String> loadedPhotos = [];
+    if (json['photosBase64'] != null) {
+      loadedPhotos = List<String>.from(json['photosBase64']);
+    } else if (json['photoBase64'] != null && (json['photoBase64'] as String).isNotEmpty) {
+      loadedPhotos.add(json['photoBase64']);
+    }
+
+    return WorkLead(
+      id: json['id'] ?? DateTime.now().toString(),
+      stapleId: json['stapleId'] ?? '',
+      shapedCode: json['shapedCode'] ?? '',
+      shapedTitle: json['shapedTitle'] ?? '',
+      tiedDate: json['tiedDate'] ?? '',
+      currentTotalLength: json['currentTotalLength'] ?? '71.0',
+      qualityLevel: json['qualityLevel'] ?? 1,
+      photosBase64: loadedPhotos,
+      logs: (json['logs'] as List? ?? [])
+          .map((e) => ScrapeLog.fromJson(e))
+          .toList(),
+    );
+  }
 }
