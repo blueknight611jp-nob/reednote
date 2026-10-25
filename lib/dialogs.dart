@@ -4,7 +4,6 @@ import 'models.dart';
 class StockDialogs {
   
   // 共通のブランド入力用 Autocomplete ウィジェット
-  // 共通のブランド入力用 Autocomplete ウィジェット (全称・略称どちらの入力でも補完可能)
   static Widget buildBrandAutocomplete({
     required List<String> options,
     required String initialValue,
@@ -18,7 +17,6 @@ class StockDialogs {
           return options;
         }
 
-        // 入力文字列（例: "gon" や "rig"）が、ブランド全称 または 3文字略称のどちらかに一致すれば候補に表示
         return options.where((option) {
           final fullName = option.toLowerCase();
           final prefix3 = (option.length >= 3 ? option.substring(0, 3) : option).toLowerCase();
@@ -37,12 +35,43 @@ class StockDialogs {
           },
           decoration: const InputDecoration(
             labelText: 'ブランド',
-            hintText: '例: Rigotti または Rig',
+            hintText: 'タップして選択または入力',
           ),
         );
       },
     );
   }
+
+  // 共通の購入時期用 Autocomplete ウィジェット
+  static Widget buildPeriodAutocomplete({
+    required List<String> options,
+    required String initialValue,
+    required ValueChanged<String> onSelected,
+  }) {
+    return Autocomplete<String>(
+      initialValue: TextEditingValue(text: initialValue),
+      optionsBuilder: (TextEditingValue textEditingValue) {
+        final query = textEditingValue.text.trim().toLowerCase();
+        if (query.isEmpty) return options;
+        return options.where((option) => option.toLowerCase().contains(query));
+      },
+      onSelected: onSelected,
+      fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+        return TextField(
+          controller: controller,
+          focusNode: focusNode,
+          onEditingComplete: onEditingComplete,
+          onChanged: (text) => onSelected(text),
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: '購入時期 (例: 202506)',
+            hintText: 'タップして選択または入力',
+          ),
+        );
+      },
+    );
+  }
+
   // ==========================================
   // 新規登録ダイアログ群
   // ==========================================
@@ -50,21 +79,27 @@ class StockDialogs {
   static void showAddTubeDialog({
     required BuildContext context,
     required List<String> existingBrands,
+    required List<String> existingPeriods,
     required List<String> existingVendors,
     required String Function(String brand, String period, String typeLetter) getNextCode,
     required Function(TubeStock newStock) onRegistered,
   }) {
-    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Rigotti';
-    final periodCtrl = TextEditingController(text: '202506');
-    final codeCtrl = TextEditingController(text: getNextCode(selectedBrand, '202506', 'T'));
+    String selectedBrand = '';
+    String selectedPeriod = '';
+    final periodCtrl = TextEditingController(text: selectedPeriod);
+    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'T'));
     String selectedVendor = '直輸入';
     final diameterCtrl = TextEditingController(text: '10〜10.5mm');
     final countCtrl = TextEditingController(text: '10');
     final memoCtrl = TextEditingController();
 
     void updateCode() {
-      codeCtrl.text = getNextCode(selectedBrand, periodCtrl.text, 'T');
+      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
+      codeCtrl.text = getNextCode(b, p, 'T');
     }
+
+    periodCtrl.addListener(updateCode);
 
     showDialog(
       context: context,
@@ -82,10 +117,14 @@ class StockDialogs {
                   updateCode();
                 },
               ),
-              TextField(
-                controller: periodCtrl,
-                decoration: const InputDecoration(labelText: '購入時期 (YYYYMM 例: 202506)'),
-                onChanged: (_) => updateCode(),
+              buildPeriodAutocomplete(
+                options: existingPeriods,
+                initialValue: selectedPeriod,
+                onSelected: (val) {
+                  selectedPeriod = val;
+                  periodCtrl.text = val;
+                  updateCode();
+                },
               ),
               Autocomplete<String>(
                 optionsBuilder: (TextEditingValue textEditingValue) {
@@ -113,8 +152,8 @@ class StockDialogs {
               onRegistered(TubeStock(
                 id: DateTime.now().toString(),
                 code: codeCtrl.text,
-                brand: selectedBrand,
-                purchasePeriod: periodCtrl.text,
+                brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
+                purchasePeriod: periodCtrl.text.isEmpty ? '202506' : periodCtrl.text,
                 vendor: selectedVendor,
                 diameter: diameterCtrl.text,
                 memo: memoCtrl.text,
@@ -132,20 +171,26 @@ class StockDialogs {
   static void showAddSplitDialog({
     required BuildContext context,
     required List<String> existingBrands,
+    required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(SplitCaneStock newStock) onRegistered,
+    required Function(SplitCaneStock newSplit) onRegistered,
   }) {
-    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Rigotti';
-    final periodCtrl = TextEditingController(text: '202506');
-    final codeCtrl = TextEditingController(text: getNextCode(selectedBrand, '202506', 'P'));
+    String selectedBrand = '';
+    String selectedPeriod = '';
+    final periodCtrl = TextEditingController(text: selectedPeriod);
+    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'P'));
     final diameterCtrl = TextEditingController(text: '10〜10.5mm');
     final sourceCtrl = TextEditingController(text: '手動登録');
     final countCtrl = TextEditingController(text: '10');
     final memoCtrl = TextEditingController();
 
     void updateCode() {
-      codeCtrl.text = getNextCode(selectedBrand, periodCtrl.text, 'P');
+      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
+      codeCtrl.text = getNextCode(b, p, 'P');
     }
+
+    periodCtrl.addListener(updateCode);
 
     showDialog(
       context: context,
@@ -163,10 +208,14 @@ class StockDialogs {
                   updateCode();
                 },
               ),
-              TextField(
-                controller: periodCtrl,
-                decoration: const InputDecoration(labelText: '購入時期 (YYYYMM)'),
-                onChanged: (_) => updateCode(),
+              buildPeriodAutocomplete(
+                options: existingPeriods,
+                initialValue: selectedPeriod,
+                onSelected: (val) {
+                  selectedPeriod = val;
+                  periodCtrl.text = val;
+                  updateCode();
+                },
               ),
               TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: sourceCtrl, decoration: const InputDecoration(labelText: '由来メモ')),
@@ -185,8 +234,8 @@ class StockDialogs {
                 id: DateTime.now().toString(),
                 code: codeCtrl.text,
                 sourceInfo: sourceCtrl.text,
-                brand: selectedBrand,
-                purchasePeriod: periodCtrl.text,
+                brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
+                purchasePeriod: periodCtrl.text.isEmpty ? '202506' : periodCtrl.text,
                 diameter: diameterCtrl.text,
                 memo: memoCtrl.text,
                 remainingCount: int.tryParse(countCtrl.text) ?? 0,
@@ -203,20 +252,27 @@ class StockDialogs {
   static void showAddGougedDialog({
     required BuildContext context,
     required List<String> existingBrands,
+    required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
     required Function(GougedCaneStock newStock) onRegistered,
   }) {
-    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Rigotti';
-    final periodCtrl = TextEditingController(text: '202506');
-    final codeCtrl = TextEditingController(text: getNextCode(selectedBrand, '202506', 'G'));
+    String selectedBrand = '';
+    String selectedPeriod = '';
+    final periodCtrl = TextEditingController(text: selectedPeriod);
+    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'G'));
     final thickCtrl = TextEditingController(text: '0.58');
+    final diameterCtrl = TextEditingController(text: '10〜10.5mm'); // ★太さを追加
     final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
     final countCtrl = TextEditingController(text: '5');
     final memoCtrl = TextEditingController();
 
     void updateCode() {
-      codeCtrl.text = getNextCode(selectedBrand, periodCtrl.text, 'G');
+      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
+      codeCtrl.text = getNextCode(b, p, 'G');
     }
+
+    periodCtrl.addListener(updateCode);
 
     showDialog(
       context: context,
@@ -234,12 +290,17 @@ class StockDialogs {
                   updateCode();
                 },
               ),
-              TextField(
-                controller: periodCtrl,
-                decoration: const InputDecoration(labelText: '購入時期 (YYYYMM)'),
-                onChanged: (_) => updateCode(),
+              buildPeriodAutocomplete(
+                options: existingPeriods,
+                initialValue: selectedPeriod,
+                onSelected: (val) {
+                  selectedPeriod = val;
+                  periodCtrl.text = val;
+                  updateCode();
+                },
               ),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★太さ入力欄を追加
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
               TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
@@ -252,12 +313,15 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
+              final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+              final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
               onRegistered(GougedCaneStock(
                 id: DateTime.now().toString(),
                 code: codeCtrl.text,
-                sourceTitle: '$selectedBrand (${periodCtrl.text})',
+                sourceTitle: '$b ($p)',
                 machine: 'Michel',
                 targetThickness: thickCtrl.text,
+                diameter: diameterCtrl.text, // ★
                 gougingDate: dateCtrl.text,
                 memo: memoCtrl.text,
                 remainingCount: int.tryParse(countCtrl.text) ?? 0,
@@ -274,20 +338,27 @@ class StockDialogs {
   static void showAddShapedDialog({
     required BuildContext context,
     required List<String> existingBrands,
+    required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
     required Function(ShapedCaneStock newStock) onRegistered,
   }) {
-    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Rigotti';
-    final periodCtrl = TextEditingController(text: '202506');
-    final codeCtrl = TextEditingController(text: getNextCode(selectedBrand, '202506', 'S'));
+    String selectedBrand = '';
+    String selectedPeriod = '';
+    final periodCtrl = TextEditingController(text: selectedPeriod);
+    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'S'));
     final shaperCtrl = TextEditingController(text: 'H39');
+    final diameterCtrl = TextEditingController(text: '10〜10.5mm'); // ★太さを追加
     final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
     final countCtrl = TextEditingController(text: '5');
     final memoCtrl = TextEditingController();
 
     void updateCode() {
-      codeCtrl.text = getNextCode(selectedBrand, periodCtrl.text, 'S');
+      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
+      codeCtrl.text = getNextCode(b, p, 'S');
     }
+
+    periodCtrl.addListener(updateCode);
 
     showDialog(
       context: context,
@@ -305,12 +376,17 @@ class StockDialogs {
                   updateCode();
                 },
               ),
-              TextField(
-                controller: periodCtrl,
-                decoration: const InputDecoration(labelText: '購入時期 (YYYYMM)'),
-                onChanged: (_) => updateCode(),
+              buildPeriodAutocomplete(
+                options: existingPeriods,
+                initialValue: selectedPeriod,
+                onSelected: (val) {
+                  selectedPeriod = val;
+                  periodCtrl.text = val;
+                  updateCode();
+                },
               ),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★太さ入力欄を追加
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
               TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
@@ -323,11 +399,14 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
+              final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
+              final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
               onRegistered(ShapedCaneStock(
                 id: DateTime.now().toString(),
                 code: codeCtrl.text,
-                sourceTitle: '$selectedBrand (${periodCtrl.text})',
+                sourceTitle: '$b ($p)',
                 shaper: shaperCtrl.text,
+                diameter: diameterCtrl.text, // ★
                 shapingDate: dateCtrl.text,
                 memo: memoCtrl.text,
                 remainingCount: int.tryParse(countCtrl.text) ?? 0,
@@ -467,6 +546,7 @@ class StockDialogs {
     final codeCtrl = TextEditingController(text: gouged.code);
     final titleCtrl = TextEditingController(text: gouged.sourceTitle);
     final thickCtrl = TextEditingController(text: gouged.targetThickness);
+    final diameterCtrl = TextEditingController(text: gouged.diameter); // ★太さを編集
     final dateCtrl = TextEditingController(text: gouged.gougingDate);
     final memoCtrl = TextEditingController(text: gouged.memo ?? '');
 
@@ -480,6 +560,7 @@ class StockDialogs {
             children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材名')),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
@@ -494,6 +575,7 @@ class StockDialogs {
               gouged.code = codeCtrl.text;
               gouged.sourceTitle = titleCtrl.text;
               gouged.targetThickness = thickCtrl.text;
+              gouged.diameter = diameterCtrl.text; // ★
               gouged.gougingDate = dateCtrl.text;
               gouged.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
               onSaved();
@@ -514,6 +596,7 @@ class StockDialogs {
     final codeCtrl = TextEditingController(text: shaped.code);
     final titleCtrl = TextEditingController(text: shaped.sourceTitle);
     final shaperCtrl = TextEditingController(text: shaped.shaper);
+    final diameterCtrl = TextEditingController(text: shaped.diameter); // ★太さを編集
     final dateCtrl = TextEditingController(text: shaped.shapingDate);
     final memoCtrl = TextEditingController(text: shaped.memo ?? '');
 
@@ -527,6 +610,7 @@ class StockDialogs {
             children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材/情報')),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
@@ -541,6 +625,7 @@ class StockDialogs {
               shaped.code = codeCtrl.text;
               shaped.sourceTitle = titleCtrl.text;
               shaped.shaper = shaperCtrl.text;
+              shaped.diameter = diameterCtrl.text; // ★
               shaped.shapingDate = dateCtrl.text;
               shaped.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
               onSaved();
@@ -554,7 +639,7 @@ class StockDialogs {
   }
 
   // ==========================================
-  // 加工移動ダイアログ群
+  // 加工移動ダイアログ群 (元の太さを自動引き継ぎ)
   // ==========================================
 
   static void showProcessTubeToSplitDialog({
@@ -607,7 +692,7 @@ class StockDialogs {
                 brand: tube.brand,
                 purchasePeriod: tube.purchasePeriod,
                 vendor: tube.vendor,
-                diameter: tube.diameter,
+                diameter: tube.diameter, // ★ 太さを引き継ぎ
                 memo: memoCtrl.text,
                 remainingCount: yieldCount,
               ));
@@ -629,6 +714,7 @@ class StockDialogs {
   }) {
     final useCountCtrl = TextEditingController(text: '5');
     final thickCtrl = TextEditingController(text: '0.58');
+    final diameterCtrl = TextEditingController(text: split.diameter); // ★半カマボコの太さを引き継ぎ
     final newCodeCtrl = TextEditingController(text: getNextCode(split.brand, split.purchasePeriod, 'G'));
     final memoCtrl = TextEditingController(text: 'Michelマシン');
 
@@ -642,6 +728,7 @@ class StockDialogs {
             children: [
               TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '加工する枚数')),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ (mm)')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
               TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成するカマボコの識別マーク')),
@@ -662,6 +749,7 @@ class StockDialogs {
                 sourceTitle: '${split.brand} (${split.purchasePeriod})',
                 machine: 'Michel',
                 targetThickness: thickCtrl.text,
+                diameter: diameterCtrl.text, // ★
                 gougingDate: DateTime.now().toLocal().toString().split(' ')[0],
                 memo: memoCtrl.text,
                 remainingCount: useCount,
@@ -684,6 +772,7 @@ class StockDialogs {
   }) {
     final useCountCtrl = TextEditingController(text: '5');
     final shaperCtrl = TextEditingController(text: 'H39');
+    final diameterCtrl = TextEditingController(text: gouged.diameter); // ★カマボコの太さを引き継ぎ
     
     String brand = 'Rigotti';
     String period = '202506';
@@ -707,6 +796,7 @@ class StockDialogs {
             children: [
               TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'シェイプする枚数')),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
               TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成する舟形の識別マーク')),
@@ -726,6 +816,7 @@ class StockDialogs {
                 code: newCodeCtrl.text,
                 sourceTitle: '${gouged.sourceTitle}${gouged.targetThickness}mm',
                 shaper: shaperCtrl.text,
+                diameter: diameterCtrl.text, // ★
                 shapingDate: DateTime.now().toLocal().toString().split(' ')[0],
                 memo: memoCtrl.text,
                 remainingCount: useCount,
@@ -740,7 +831,6 @@ class StockDialogs {
     );
   }
 
-
   // ==========================================
   // Staple (チューブ) 管理ダイアログ群
   // ==========================================
@@ -750,9 +840,9 @@ class StockDialogs {
     required List<String> existingBrands,
     required Function(List<StapleStock> newStaples) onRegistered,
   }) {
-    String selectedBrand = existingBrands.isNotEmpty ? existingBrands.first : 'Chiarugi';
+    String selectedBrand = '';
     final modelCtrl = TextEditingController(text: '2');
-    final lengthCtrl = TextEditingController(text: '46'); // 単位なし
+    final lengthCtrl = TextEditingController(text: '46');
     final materialCtrl = TextEditingController(text: 'Brass');
     final startMarkCtrl = TextEditingController(text: 'a');
     final endMarkCtrl = TextEditingController(text: 'z');
@@ -764,10 +854,10 @@ class StockDialogs {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
-          // プレビューID (例: Chiarugi246a)
+          final brandForPreview = selectedBrand.isEmpty ? 'Chiarugi' : selectedBrand;
           String previewId = isBatchMode
-              ? '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${startMarkCtrl.text}〜'
-              : '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${singleMarkCtrl.text}';
+              ? '$brandForPreview${modelCtrl.text}${lengthCtrl.text}${startMarkCtrl.text}〜'
+              : '$brandForPreview${modelCtrl.text}${lengthCtrl.text}${singleMarkCtrl.text}';
 
           return AlertDialog(
             title: const Text('チューブ (Staple) の新規登録'),
@@ -858,6 +948,7 @@ class StockDialogs {
                 onPressed: () {
                   final List<StapleStock> generatedList = [];
                   final now = DateTime.now();
+                  final brandToUse = selectedBrand.isEmpty ? 'Chiarugi' : selectedBrand;
 
                   if (isBatchMode) {
                     final start = startMarkCtrl.text.trim().toLowerCase();
@@ -867,7 +958,7 @@ class StockDialogs {
                     for (int i = 0; i < marks.length; i++) {
                       generatedList.add(StapleStock(
                         id: '${now.millisecondsSinceEpoch}_$i',
-                        brand: selectedBrand,
+                        brand: brandToUse,
                         model: modelCtrl.text,
                         length: lengthCtrl.text,
                         mark: marks[i],
@@ -878,7 +969,7 @@ class StockDialogs {
                   } else {
                     generatedList.add(StapleStock(
                       id: now.toString(),
-                      brand: selectedBrand,
+                      brand: brandToUse,
                       model: modelCtrl.text,
                       length: lengthCtrl.text,
                       mark: singleMarkCtrl.text.trim(),
@@ -979,7 +1070,6 @@ class StockDialogs {
     );
   }
 
-  // アルファベット連番生成用ヘルパー (a..z, aa..az, ah 等に対応)
   static List<String> _generateLetterSequence(String start, String end) {
     List<String> result = [];
     int startVal = _letterToVal(start);
@@ -1011,13 +1101,10 @@ class StockDialogs {
     return res;
   }
 
-  // ==========================================
-  // 舟形ケーン -> 糸巻き(Tied) 加工ダイアログ
-  // ==========================================
   static void showProcessShapedToTiedDialog({
     required BuildContext context,
     required ShapedCaneStock shaped,
-    required List<StapleStock> availableStaples, // 未使用(unused)のチューブ一覧
+    required List<StapleStock> availableStaples,
     required Function(TiedStock newTied, StapleStock selectedStaple) onProcessed,
   }) {
     if (availableStaples.isEmpty) {
@@ -1040,7 +1127,14 @@ class StockDialogs {
     StapleStock selectedStaple = availableStaples.first;
     final lengthController = TextEditingController(text: '73.0');
     final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
-    final threadController = TextEditingController();
+    
+    // ★ 糸の種類と色の選択肢
+    final List<String> threadTypes = ['ナイロン', 'ポリエステル', '絹'];
+    final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
+    
+    String selectedType = 'ナイロン';
+    String selectedColor = '赤';
+
     final memoController = TextEditingController();
 
     showDialog(
@@ -1054,34 +1148,23 @@ class StockDialogs {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    
-                    // 使用するチューブを選択
                     DropdownButtonFormField<StapleStock>(
                       value: selectedStaple,
                       decoration: const InputDecoration(labelText: '使用するチューブ (Staple)'),
-                      
-                      // 1. 選択されたあとの表示（ボックス内の文字）を大きくする
-                      style: const TextStyle(
-                        fontSize: 16, // お好みのサイズ（例: 16 や 18）
-                        color: Colors.black,
-                      ),
-
+                      style: const TextStyle(fontSize: 16, color: Colors.black),
                       items: availableStaples.map((staple) {
                         return DropdownMenuItem<StapleStock>(
                           value: staple,
-                          // 2. プルダウンを開いたときのリスト内の文字を大きくする
                           child: Text(
                             '${staple.brand} ${staple.model} (${staple.length}) ${staple.mark}',
-                            style: const TextStyle(fontSize: 16), // リスト側のフォントサイズ
+                            style: const TextStyle(fontSize: 16),
                           ),
                         );
                       }).toList(),
-
                       onChanged: (val) {
                         if (val != null) setState(() => selectedStaple = val);
                       },
                     ),
-
                     const SizedBox(height: 12),
                     TextField(
                       controller: lengthController,
@@ -1097,12 +1180,29 @@ class StockDialogs {
                       decoration: const InputDecoration(labelText: '糸巻き日 (YYYY-MM-DD)'),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
-                      controller: threadController,
-                      decoration: const InputDecoration(
-                        labelText: '糸の色・種類 (任意)',
-                        hintText: 'Blue, Greenなど',
-                      ),
+                    // ★ 糸の種類と色の選択プルダウン
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 3,
+                          child: DropdownButtonFormField<String>(
+                            value: selectedType,
+                            decoration: const InputDecoration(labelText: '糸の種類'),
+                            items: threadTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                            onChanged: (val) => setState(() => selectedType = val ?? 'ナイロン'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 2,
+                          child: DropdownButtonFormField<String>(
+                            value: selectedColor,
+                            decoration: const InputDecoration(labelText: '糸の色'),
+                            items: threadColors.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                            onChanged: (val) => setState(() => selectedColor = val ?? '赤'),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -1119,6 +1219,9 @@ class StockDialogs {
                 ),
                 ElevatedButton(
                   onPressed: () {
+                    // ★ 「ナイロン赤」のように結合して保存
+                    final combinedThreadColor = '$selectedType$selectedColor';
+
                     final newTied = TiedStock(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
                       stapleId: selectedStaple.stapleId,
@@ -1126,7 +1229,7 @@ class StockDialogs {
                       shapedTitle: shaped.displayTitle,
                       tiedDate: dateController.text,
                       totalLength: lengthController.text.isEmpty ? '73.0' : lengthController.text,
-                      threadColor: threadController.text.isEmpty ? null : threadController.text,
+                      threadColor: combinedThreadColor,
                       memo: memoController.text.isEmpty ? null : memoController.text,
                     );
 

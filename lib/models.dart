@@ -104,6 +104,7 @@ class GougedCaneStock {
   String sourceTitle;
   String machine;
   String targetThickness;
+  String diameter;
   String gougingDate;
   String? memo;
   int remainingCount;
@@ -114,12 +115,13 @@ class GougedCaneStock {
     required this.sourceTitle,
     required this.machine,
     required this.targetThickness,
+    required this.diameter,
     required this.gougingDate,
     required this.memo,
     required this.remainingCount,
   });
 
-  String get displayTitle => '[$code] $sourceTitle (G $targetThickness mm)';
+  String get displayTitle => '[$code] $sourceTitle (G$targetThickness mm)';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -127,6 +129,7 @@ class GougedCaneStock {
         'sourceTitle': sourceTitle,
         'machine': machine,
         'targetThickness': targetThickness,
+        'diameter': diameter,
         'gougingDate': gougingDate,
         'memo': memo,
         'remainingCount': remainingCount,
@@ -138,6 +141,7 @@ class GougedCaneStock {
         sourceTitle: json['sourceTitle'] ?? '',
         machine: json['machine'] ?? 'Michel',
         targetThickness: json['targetThickness'] ?? '0.58',
+        diameter: json['diameter'] ?? '10〜10.5mm',
         gougingDate: json['gougingDate'] ?? '',
         memo: json['memo'],
         remainingCount: json['remainingCount'] ?? 0,
@@ -149,6 +153,7 @@ class ShapedCaneStock {
   String code; // 識別マーク (例: S01-Gon2506)
   String sourceTitle;
   String shaper;
+  String diameter;
   String shapingDate;
   String? memo;
   int remainingCount;
@@ -158,18 +163,20 @@ class ShapedCaneStock {
     required this.code,
     required this.sourceTitle,
     required this.shaper,
+    required this.diameter,
     required this.shapingDate,
     required this.memo,
     required this.remainingCount,
   });
 
-  String get displayTitle => '[$code] $shaper - $sourceTitle (舟形)';
+  String get displayTitle => '[$code] $shaper -$sourceTitle (舟形)';
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'code': code,
         'sourceTitle': sourceTitle,
         'shaper': shaper,
+        'diameter': diameter,
         'shapingDate': shapingDate,
         'memo': memo,
         'remainingCount': remainingCount,
@@ -180,6 +187,7 @@ class ShapedCaneStock {
         code: json['code'] ?? 'S01-Can2501',
         sourceTitle: json['sourceTitle'] ?? '',
         shaper: json['shaper'] ?? 'H39',
+        diameter: json['diameter'] ?? '10〜10.5mm',
         shapingDate: json['shapingDate'] ?? '',
         memo: json['memo'],
         remainingCount: json['remainingCount'] ?? 0,
@@ -241,7 +249,7 @@ class StapleStock {
 
   String get stapleId => '$brand$model$length$mark';
 
-  String get displayTitle => '[$stapleId] $brand $model ($length - $mark)';
+  String get displayTitle => '[$stapleId] $brand$model ($length -$mark)';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -314,12 +322,12 @@ class TiedStock {
 }
 
 // ==========================================
-// 日々の削り・試奏ログモデル (dateを編集可能に修正)
+// 日々の削り・試奏ログモデル
 // ==========================================
 class ScrapeLog {
   final String id;
   String date;                // 記録日 (YYYY-MM-DD)
-  int? level;                 // ★追加: その時点のコンディションレベル (1〜5)
+  int? level;                 // コンディションレベル (1〜5)
   String? totalLength;        // その時点の全長 (例: 71.5mm)
   String? scrapeLength;       // スクレープ長 (例: 10.5mm)
   String? pitchRating;        // ピッチ/音程評価
@@ -360,22 +368,22 @@ class ScrapeLog {
       );
 }
 
-
 // ==========================================
-// 調整中・完成リードモデル 
+// 調整中・完成リードモデル (WorkReedに統一)
 // ==========================================
-class WorkLead {
+class WorkReed {
   final String id;
-  String stapleId;         // finalを外す
-  String shapedCode;       // finalを外す
-  String shapedTitle;      // finalを外す
+  String stapleId;
+  String shapedCode;
+  String shapedTitle;
   final String tiedDate;
   String currentTotalLength; // 現在の全長
   int qualityLevel;          // コンディションレベル (0〜5)
+  String? threadColor;       // 糸情報 (例: ナイロン赤)
   List<String> photosBase64; // 写真複数枚
   List<ScrapeLog> logs;      // 履歴リスト
 
-  WorkLead({
+  WorkReed({
     required this.id,
     required this.stapleId,
     required this.shapedCode,
@@ -383,6 +391,7 @@ class WorkLead {
     required this.tiedDate,
     required this.currentTotalLength,
     this.qualityLevel = 1,
+    this.threadColor,
     List<String>? photosBase64,
     required this.logs,
   }) : photosBase64 = photosBase64 ?? [];
@@ -395,11 +404,12 @@ class WorkLead {
         'tiedDate': tiedDate,
         'currentTotalLength': currentTotalLength,
         'qualityLevel': qualityLevel,
+        'threadColor': threadColor,
         'photosBase64': photosBase64,
         'logs': logs.map((e) => e.toJson()).toList(),
       };
 
-  factory WorkLead.fromJson(Map<String, dynamic> json) {
+  factory WorkReed.fromJson(Map<String, dynamic> json) {
     List<String> loadedPhotos = [];
     if (json['photosBase64'] != null) {
       loadedPhotos = List<String>.from(json['photosBase64']);
@@ -407,7 +417,7 @@ class WorkLead {
       loadedPhotos.add(json['photoBase64']);
     }
 
-    return WorkLead(
+    return WorkReed(
       id: json['id'] ?? DateTime.now().toString(),
       stapleId: json['stapleId'] ?? '',
       shapedCode: json['shapedCode'] ?? '',
@@ -415,6 +425,7 @@ class WorkLead {
       tiedDate: json['tiedDate'] ?? '',
       currentTotalLength: json['currentTotalLength'] ?? '71.0',
       qualityLevel: json['qualityLevel'] ?? 1,
+      threadColor: json['threadColor'],
       photosBase64: loadedPhotos,
       logs: (json['logs'] as List? ?? [])
           .map((e) => ScrapeLog.fromJson(e))

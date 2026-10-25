@@ -9,6 +9,23 @@ void main() {
   runApp(const ReedNoteApp());
 }
 
+// 共通の糸カラー決定ヘルパー
+Color getThreadColor(String? threadName) {
+  if (threadName == null) return Colors.grey;
+  final name = threadName.toLowerCase();
+  if (name.contains('赤') || name.contains('桃') || name.contains('red') || name.contains('pink')) {
+    return name.contains('桃') ? Colors.pinkAccent : Colors.red;
+  }
+  if (name.contains('青') || name.contains('blue')) return Colors.blue;
+  if (name.contains('黄') || name.contains('yellow')) return Colors.amber;
+  if (name.contains('緑') || name.contains('green')) return Colors.green;
+  if (name.contains('黒') || name.contains('black')) return Colors.black87;
+  if (name.contains('紫') || name.contains('purple')) return Colors.purple;
+  if (name.contains('橙') || name.contains('orange')) return Colors.deepOrange;
+  if (name.contains('白') || name.contains('white')) return Colors.grey.shade300;
+  return Colors.brown;
+}
+
 class ReedNoteApp extends StatelessWidget {
   const ReedNoteApp({super.key});
 
@@ -30,7 +47,7 @@ class ReedNoteApp extends StatelessWidget {
 }
 
 // ==========================================
-// 2ページ構成を管理するルート画面 (外部からタブ切り替え可能)
+// 2ページ構成を管理するルート画面
 // ==========================================
 class MainRootPage extends StatefulWidget {
   const MainRootPage({super.key});
@@ -99,17 +116,16 @@ class AdjustmentWorkPage extends StatefulWidget {
 
 class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     with SingleTickerProviderStateMixin {
-  List<WorkLead> _workLeads = [];
+  List<WorkReed> _workReeds = [];
   late TabController _subTabController;
 
-  // レベル別タブ定義 (Lv.1〜Lv.5)
   final List<int> _levels = [1, 2, 3, 4, 5];
 
   @override
   void initState() {
     super.initState();
     _subTabController = TabController(length: _levels.length, vsync: this);
-    _loadWorkLeads();
+    _loadWorkReeds();
   }
 
   @override
@@ -121,27 +137,26 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadWorkLeads();
+    _loadWorkReeds();
   }
 
-  Future<void> _loadWorkLeads() async {
+  Future<void> _loadWorkReeds() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('work_leads_data');
     if (jsonString != null) {
       final List decoded = jsonDecode(jsonString);
       setState(() {
-        _workLeads = decoded.map((e) => WorkLead.fromJson(e)).toList();
+        _workReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
       });
     }
   }
 
-  Future<void> _saveWorkLeads() async {
+  Future<void> _saveWorkReeds() async {
     final prefs = await SharedPreferences.getInstance();
-    final jsonString = jsonEncode(_workLeads.map((e) => e.toJson()).toList());
+    final jsonString = jsonEncode(_workReeds.map((e) => e.toJson()).toList());
     await prefs.setString('work_leads_data', jsonString);
   }
 
-  // 識別ID生成ヘルパー (例: Chiarugi 2, 46, a -> Chiarugi246a)
   String _generateStapleId(String model, String length, String mark) {
     final cleanModel = model.replaceAll(RegExp(r'\s+'), '');
     final cleanLength = length.replaceAll(RegExp(r'[^0-9]'), '');
@@ -149,13 +164,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     return '$cleanModel$cleanLength$cleanMark';
   }
 
-  // 分解確認ダイアログ
-  void _confirmAndDismantle(WorkLead lead) {
+  void _confirmAndDismantle(WorkReed reed) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('リードの分解とチューブ回収'),
-        content: Text('[チューブ: ${lead.stapleId}] ${lead.shapedTitle}\n\nこのリードを分解しますか？\n※チューブは素材ストックの「未使用」に自動で戻り、このリードは一覧から削除されます。'),
+        content: Text('[チューブ: ${reed.stapleId}] ${reed.shapedTitle}\n\nこのリードを分解しますか？\n※チューブは素材ストックの「未使用」に自動で戻り、このリードは一覧から削除されます。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -168,7 +182,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             ),
             onPressed: () {
               Navigator.pop(context);
-              _handleDismantle(lead);
+              _handleDismantle(reed);
             },
             child: const Text('分解する'),
           ),
@@ -177,13 +191,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // リード削除確認ダイアログ
-  void _confirmAndDeleteLead(WorkLead lead) {
+  void _confirmAndDeleteReed(WorkReed reed) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('リードの削除'),
-        content: Text('[${lead.stapleId}] ${lead.shapedTitle}\n\nこのリードを一覧から完全に削除しますか？'),
+        content: Text('[${reed.stapleId}] ${reed.shapedTitle}\n\nこのリードを一覧から完全に削除しますか？'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -196,9 +209,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             ),
             onPressed: () {
               setState(() {
-                _workLeads.remove(lead);
+                _workReeds.remove(reed);
               });
-              _saveWorkLeads();
+              _saveWorkReeds();
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('リードを削除しました')),
@@ -211,12 +224,11 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // レベル0（分解）に変更された場合のチューブ返却処理
-  Future<void> _handleDismantle(WorkLead lead) async {
+  Future<void> _handleDismantle(WorkReed reed) async {
     setState(() {
-      _workLeads.remove(lead);
+      _workReeds.remove(reed);
     });
-    await _saveWorkLeads();
+    await _saveWorkReeds();
 
     final prefs = await SharedPreferences.getInstance();
     final stapleJson = prefs.getString('staple_stocks');
@@ -226,7 +238,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       
       bool updated = false;
       for (var st in staples) {
-        if (st.stapleId == lead.stapleId) {
+        if (st.stapleId == reed.stapleId) {
           st.status = StapleStatus.unused;
           updated = true;
           break;
@@ -236,15 +248,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('リードを分解しました。チューブ[${lead.stapleId}]を未使用ストックへ戻しました。')),
+            SnackBar(content: Text('リードを分解しました。チューブ[${reed.stapleId}]を未使用ストックへ戻しました。')),
           );
         }
       }
     }
   }
 
-  // 写真を追加する処理 (ファイル選択からBase64変換して追加)
-  void _pickAndAddPhoto(WorkLead lead) {
+  void _pickAndAddPhoto(WorkReed reed) {
     final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
     uploadInput.click();
     uploadInput.onChange.listen((e) {
@@ -255,9 +266,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         final base64String = reader.result as String?;
         if (base64String != null) {
           setState(() {
-            lead.photosBase64.add(base64String);
+            reed.photosBase64.add(base64String);
           });
-          _saveWorkLeads();
+          _saveWorkReeds();
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('写真を追加しました')),
           );
@@ -267,7 +278,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     });
   }
 
-  // 写真を拡大表示するポップアップ
   void _showPhotoPreview(String base64Image) {
     showDialog(
       context: context,
@@ -292,33 +302,51 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // WorkLead ダイレクト新規登録 ＆ 編集ダイアログ
-  void _showWorkLeadDialog({WorkLead? existingLead}) {
-    // 既存データがある場合は初期値にセット、なければデフォルト
-    String selectedModel = existingLead != null 
-        ? (existingLead.shapedTitle.contains(' ') ? existingLead.shapedTitle.split(' ').first : 'Chiarugi 2') 
+  void _showWorkReedDialog({WorkReed? existingReed}) {
+    String selectedModel = existingReed != null 
+        ? (existingReed.shapedTitle.contains(' ') ? existingReed.shapedTitle.split(' ').first : 'Chiarugi 2') 
         : 'Chiarugi 2';
     
-    int qualityLevel = existingLead?.qualityLevel ?? 1;
-    String totalLength = existingLead?.currentTotalLength ?? '71.0';
-    List<String> photos = existingLead != null ? List.from(existingLead.photosBase64) : [];
+    int qualityLevel = existingReed?.qualityLevel ?? 1;
+    String totalLength = existingReed?.currentTotalLength ?? '71.0';
+    List<String> photos = existingReed != null ? List.from(existingReed.photosBase64) : [];
 
     final lengthController = TextEditingController(text: '46');
     final markController = TextEditingController(text: 'a');
     final totalLengthController = TextEditingController(text: totalLength);
     final memoController = TextEditingController();
 
-    // 編集時は既存の stapleId や title から逆算して初期値を設定できれば綺麗に設定
-    if (existingLead != null) {
-      if (existingLead.stapleId.contains('46')) {
+    final List<String> threadTypes = ['ナイロン', 'ポリエステル', '絹'];
+    final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
+    String selectedType = 'ナイロン';
+    String selectedColor = '赤';
+
+    if (existingReed != null && existingReed.threadColor != null && existingReed.threadColor!.isNotEmpty) {
+      final t = existingReed.threadColor!;
+      for (var type in threadTypes) {
+        if (t.contains(type)) {
+          selectedType = type;
+          break;
+        }
+      }
+      for (var color in threadColors) {
+        if (t.contains(color)) {
+          selectedColor = color;
+          break;
+        }
+      }
+    }
+
+    if (existingReed != null) {
+      if (existingReed.stapleId.contains('46')) {
         lengthController.text = '46';
-      } else if (existingLead.stapleId.contains('47')) {
+      } else if (existingReed.stapleId.contains('47')) {
         lengthController.text = '47';
-      } else if (existingLead.stapleId.contains('45')) {
+      } else if (existingReed.stapleId.contains('45')) {
         lengthController.text = '45';
       }
-      if (existingLead.stapleId.isNotEmpty) {
-        markController.text = existingLead.stapleId.substring(existingLead.stapleId.length - 1);
+      if (existingReed.stapleId.isNotEmpty) {
+        markController.text = existingReed.stapleId.substring(existingReed.stapleId.length - 1);
       }
     }
 
@@ -330,7 +358,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             final previewId = _generateStapleId(selectedModel, lengthController.text, markController.text);
 
             return AlertDialog(
-              title: Text(existingLead == null ? 'リードのダイレクト新規登録' : 'リード情報の編集'),
+              title: Text(existingReed == null ? 'リードのダイレクト新規登録' : 'リード情報の編集'),
               content: SingleChildScrollView(
                 child: SizedBox(
                   width: 400,
@@ -338,7 +366,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // モデル選択
                       DropdownButtonFormField<String>(
                         value: selectedModel,
                         decoration: const InputDecoration(labelText: 'ステープルモデル'),
@@ -352,8 +379,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         },
                       ),
                       const SizedBox(height: 12),
-                      
-                      // 長さ選択 (クイックチップ + カスタム入力)
                       Row(
                         children: [
                           Expanded(
@@ -391,8 +416,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      // マーク入力
                       TextField(
                         controller: markController,
                         decoration: const InputDecoration(labelText: '個体マーク (例: a, b)'),
@@ -401,15 +424,37 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       const SizedBox(height: 6),
                       Text('自動IDプレビュー: $previewId', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
-
-                      // 初期レベル
+                      Row(
+                        children: [
+                          Expanded(
+                            flex: 3,
+                            child: DropdownButtonFormField<String>(
+                              value: selectedType,
+                              decoration: const InputDecoration(labelText: '糸の種類'),
+                              items: threadTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
+                              onChanged: (val) => setDialogState(() => selectedType = val ?? 'ナイロン'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            flex: 2,
+                            child: DropdownButtonFormField<String>(
+                              value: selectedColor,
+                              decoration: const InputDecoration(labelText: '糸の色'),
+                              items: threadColors.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                              onChanged: (val) => setDialogState(() => selectedColor = val ?? '赤'),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
                       Row(
                         children: [
                           const Text('コンディション: '),
                           const SizedBox(width: 8),
                           DropdownButton<int>(
                             value: qualityLevel,
-                            items: [5,4,3,2,1].map((lvl) {
+                            items: [5, 4, 3, 2, 1].map((lvl) {
                               return DropdownMenuItem(
                                 value: lvl,
                                 child: Text('Lv. $lvl ${"★" * lvl}'),
@@ -424,16 +469,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      // 現在の全長
                       TextField(
                         controller: totalLengthController,
                         decoration: const InputDecoration(labelText: '現在の全長 (mm)'),
                         keyboardType: TextInputType.number,
                       ),
                       const SizedBox(height: 12),
-
-                      // 写真管理エリア
                       const Text('写真管理', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 6),
                       Wrap(
@@ -503,8 +544,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         ],
                       ),
                       const SizedBox(height: 12),
-
-                      if (existingLead == null) ...[
+                      if (existingReed == null) ...[
                         TextField(
                           controller: memoController,
                           decoration: const InputDecoration(
@@ -527,10 +567,11 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   onPressed: () {
                     final dateStr = DateTime.now().toString().split(' ')[0];
                     final shapedTitleText = '$selectedModel ${lengthController.text}mm';
+                    final combinedThreadColor = '$selectedType$selectedColor';
 
                     setState(() {
-                      if (existingLead == null) {
-                        final newLead = WorkLead(
+                      if (existingReed == null) {
+                        final newReed = WorkReed(
                           id: DateTime.now().millisecondsSinceEpoch.toString(),
                           stapleId: previewId,
                           shapedCode: 'ダイレクト登録',
@@ -538,6 +579,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                           tiedDate: dateStr,
                           currentTotalLength: totalLengthController.text,
                           qualityLevel: qualityLevel,
+                          threadColor: combinedThreadColor,
                           photosBase64: photos,
                           logs: [
                             if (memoController.text.isNotEmpty)
@@ -550,20 +592,20 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                               ),
                           ],
                         );
-                        _workLeads.insert(0, newLead);
+                        _workReeds.insert(0, newReed);
                       } else {
-                        // 既存リードの更新
-                        existingLead.stapleId = previewId;
-                        existingLead.shapedTitle = shapedTitleText;
-                        existingLead.qualityLevel = qualityLevel;
-                        existingLead.currentTotalLength = totalLengthController.text;
-                        existingLead.photosBase64 = photos;
+                        existingReed.stapleId = previewId;
+                        existingReed.shapedTitle = shapedTitleText;
+                        existingReed.qualityLevel = qualityLevel;
+                        existingReed.currentTotalLength = totalLengthController.text;
+                        existingReed.threadColor = combinedThreadColor;
+                        existingReed.photosBase64 = photos;
                       }
                     });
-                    _saveWorkLeads();
+                    _saveWorkReeds();
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(existingLead == null ? '[$previewId] を登録しました' : 'リード情報を更新しました')),
+                      SnackBar(content: Text(existingReed == null ? '[$previewId] を登録しました' : 'リード情報を更新しました')),
                     );
                   },
                   child: const Text('保存'),
@@ -576,14 +618,13 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // ログ追加ダイアログ
-  void _showAddLogDialog(WorkLead lead) {
+  void _showAddLogDialog(WorkReed reed) {
     final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
-    final lengthController = TextEditingController(text: lead.currentTotalLength);
+    final lengthController = TextEditingController(text: reed.currentTotalLength);
     final resistanceController = TextEditingController();
     final pitchController = TextEditingController();
     final memoController = TextEditingController();
-    int currentLevel = lead.qualityLevel;
+    int currentLevel = reed.qualityLevel;
 
     showDialog(
       context: context,
@@ -591,7 +632,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('[${lead.stapleId}] 削り・試奏ログを追加'),
+              title: Text('[${reed.stapleId}] 削り・試奏ログを追加'),
               content: SingleChildScrollView(
                 child: SizedBox(
                   width: 400,
@@ -652,17 +693,17 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     );
 
                     setState(() {
-                      lead.logs.insert(0, newLog);
-                      lead.qualityLevel = currentLevel;
+                      reed.logs.insert(0, newLog);
+                      reed.qualityLevel = currentLevel;
                       if (lengthController.text.isNotEmpty) {
-                        lead.currentTotalLength = lengthController.text;
+                        reed.currentTotalLength = lengthController.text;
                       }
                     });
-                    _saveWorkLeads();
+                    _saveWorkReeds();
                     Navigator.pop(context);
 
                     if (currentLevel == 0) {
-                      _confirmAndDismantle(lead);
+                      _confirmAndDismantle(reed);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('ログを追加しました')),
@@ -679,14 +720,13 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // ログ編集ダイアログ
-  void _showEditLogDialog(WorkLead lead, ScrapeLog log) {
+  void _showEditLogDialog(WorkReed reed, ScrapeLog log) {
     final dateController = TextEditingController(text: log.date);
     final lengthController = TextEditingController(text: log.totalLength ?? '');
     final resistanceController = TextEditingController(text: log.resistanceRating ?? '');
     final pitchController = TextEditingController(text: log.pitchRating ?? '');
     final memoController = TextEditingController(text: log.memo ?? '');
-    int editLevel = log.level ?? lead.qualityLevel;
+    int editLevel = log.level ?? reed.qualityLevel;
 
     showDialog(
       context: context,
@@ -744,10 +784,10 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       log.pitchRating = pitchController.text;
                       log.memo = memoController.text;
                     });
-                    _saveWorkLeads();
+                    _saveWorkReeds();
                     Navigator.pop(context);
                     Navigator.pop(context);
-                    _showLogHistoryDialog(lead);
+                    _showLogHistoryDialog(reed);
                   },
                   child: const Text('更新'),
                 ),
@@ -759,24 +799,23 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     );
   }
 
-  // ログ全履歴ポップアップ
-  void _showLogHistoryDialog(WorkLead lead) {
+  void _showLogHistoryDialog(WorkReed reed) {
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setHistoryState) {
             return AlertDialog(
-              title: Text('[${lead.stapleId}] 調整ログ全履歴 (${lead.logs.length}件)'),
+              title: Text('[${reed.stapleId}] 調整ログ全履歴 (${reed.logs.length}件)'),
               content: SizedBox(
                 width: 500,
                 height: 400,
-                child: lead.logs.isEmpty
+                child: reed.logs.isEmpty
                     ? const Center(child: Text('ログはまだありません'))
                     : ListView.builder(
-                        itemCount: lead.logs.length,
+                        itemCount: reed.logs.length,
                         itemBuilder: (context, index) {
-                          final log = lead.logs[index];
+                          final log = reed.logs[index];
                           final int? logLvl = log.level;
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
@@ -812,14 +851,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                                         children: [
                                           IconButton(
                                             icon: const Icon(Icons.edit, size: 18, color: Colors.blueGrey),
-                                            onPressed: () => _showEditLogDialog(lead, log),
+                                            onPressed: () => _showEditLogDialog(reed, log),
                                           ),
                                           IconButton(
                                             icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
                                             onPressed: () {
-                                              setState(() { lead.logs.remove(log); });
+                                              setState(() { reed.logs.remove(log); });
                                               setHistoryState(() {});
-                                              _saveWorkLeads();
+                                              _saveWorkReeds();
                                             },
                                           ),
                                         ],
@@ -865,13 +904,13 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             ),
             icon: const Icon(Icons.add_circle_outline, size: 18),
             label: const Text('＋ ダイレクト登録'),
-            onPressed: () => _showWorkLeadDialog(),
+            onPressed: () => _showWorkReedDialog(),
           ),
           const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: '再読み込み',
-            onPressed: _loadWorkLeads,
+            onPressed: _loadWorkReeds,
           ),
         ],
         bottom: TabBar(
@@ -890,15 +929,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       ),
       body: TabBarView(
         controller: _subTabController,
-        children: _levels.map((lvl) => _buildLeadList(lvl)).toList(),
+        children: _levels.map((lvl) => _buildReedList(lvl)).toList(),
       ),
     );
   }
 
-  Widget _buildLeadList(int level) {
-    final leads = _workLeads.where((l) => l.qualityLevel == level).toList();
+  Widget _buildReedList(int level) {
+    final reeds = _workReeds.where((l) => l.qualityLevel == level).toList();
 
-    if (leads.isEmpty) {
+    if (reeds.isEmpty) {
       return Center(
         child: Text(
           '「Lv.$level」のリードはありません',
@@ -909,9 +948,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 
     return ListView.builder(
       padding: const EdgeInsets.all(12),
-      itemCount: leads.length,
+      itemCount: reeds.length,
       itemBuilder: (context, index) {
-        final lead = leads[index];
+        final reed = reeds[index];
         return Card(
           elevation: 2,
           margin: const EdgeInsets.only(bottom: 12),
@@ -925,20 +964,19 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   children: [
                     Expanded(
                       child: Text(
-                        '[${lead.stapleId}] ${lead.shapedTitle}',
+                        '[${reed.stapleId}] ${reed.shapedTitle}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
-                    // 編集・削除ボタン
                     IconButton(
                       icon: const Icon(Icons.edit, size: 20, color: Colors.blueGrey),
                       tooltip: 'リード情報を編集',
-                      onPressed: () => _showWorkLeadDialog(existingLead: lead),
+                      onPressed: () => _showWorkReedDialog(existingReed: reed),
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
                       tooltip: 'リードを削除',
-                      onPressed: () => _confirmAndDeleteLead(lead),
+                      onPressed: () => _confirmAndDeleteReed(reed),
                     ),
                   ],
                 ),
@@ -953,7 +991,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         border: Border.all(color: Colors.amber.shade300),
                       ),
                       child: DropdownButton<int>(
-                        value: lead.qualityLevel,
+                        value: reed.qualityLevel,
                         isDense: true,
                         underline: const SizedBox.shrink(),
                         items: List.generate(6, (i) => i).reversed.map((lvl) {
@@ -968,12 +1006,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         onChanged: (newLevel) {
                           if (newLevel != null) {
                             if (newLevel == 0) {
-                              _confirmAndDismantle(lead);
+                              _confirmAndDismantle(reed);
                             } else {
                               setState(() {
-                                lead.qualityLevel = newLevel;
+                                reed.qualityLevel = newLevel;
                               });
-                              _saveWorkLeads();
+                              _saveWorkReeds();
                             }
                           }
                         },
@@ -981,17 +1019,31 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     ),
                     const SizedBox(width: 8),
                     Chip(
-                      label: Text('全長: ${lead.currentTotalLength}mm'),
+                      label: Text('全長: ${reed.currentTotalLength}mm'),
                       backgroundColor: Colors.amber.shade100,
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('コード: ${lead.shapedCode}  /  登録日: ${lead.tiedDate}'),
-                
+                Row(
+                  children: [
+                    Text('コード: ${reed.shapedCode}  /  登録日: ${reed.tiedDate}'),
+                    if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
+                      const Text('  /  糸: '),
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: getThreadColor(reed.threadColor),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${reed.threadColor}'),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 12),
-
-                // 写真セクション (サムネイル表示 ＆ 追加ボタン)
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1000,15 +1052,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          for (int i = 0; i < lead.photosBase64.length; i++)
+                          for (int i = 0; i < reed.photosBase64.length; i++)
                             Stack(
                               children: [
                                 InkWell(
-                                  onTap: () => _showPhotoPreview(lead.photosBase64[i]),
+                                  onTap: () => _showPhotoPreview(reed.photosBase64[i]),
                                   child: ClipRRect(
                                     borderRadius: BorderRadius.circular(6),
                                     child: Image.memory(
-                                      base64Decode(lead.photosBase64[i].split(',').last),
+                                      base64Decode(reed.photosBase64[i].split(',').last),
                                       width: 60,
                                       height: 60,
                                       fit: BoxFit.cover,
@@ -1021,9 +1073,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                                   child: InkWell(
                                     onTap: () {
                                       setState(() {
-                                        lead.photosBase64.removeAt(i);
+                                        reed.photosBase64.removeAt(i);
                                       });
-                                      _saveWorkLeads();
+                                      _saveWorkReeds();
                                     },
                                     child: Container(
                                       decoration: const BoxDecoration(
@@ -1044,19 +1096,17 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                             ),
                             icon: const Icon(Icons.add_a_photo, size: 18),
                             label: const Text('写真追加', style: TextStyle(fontSize: 11)),
-                            onPressed: () => _pickAndAddPhoto(lead),
+                            onPressed: () => _pickAndAddPhoto(reed),
                           ),
                         ],
                       ),
                     ),
                   ],
                 ),
-
                 const SizedBox(height: 12),
-
-                if (lead.logs.isNotEmpty) ...[
+                if (reed.logs.isNotEmpty) ...[
                   InkWell(
-                    onTap: () => _showLogHistoryDialog(lead),
+                    onTap: () => _showLogHistoryDialog(reed),
                     borderRadius: BorderRadius.circular(6),
                     child: Container(
                       width: double.infinity,
@@ -1073,7 +1123,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Text(
-                                '最新ログ (${lead.logs.first.date})',
+                                '最新ログ (${reed.logs.first.date})',
                                 style: TextStyle(
                                   fontWeight: FontWeight.bold,
                                   fontSize: 12,
@@ -1083,7 +1133,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                               Row(
                                 children: [
                                   Text(
-                                    '全 ${lead.logs.length} 件',
+                                    '全 ${reed.logs.length} 件',
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 12,
@@ -1097,19 +1147,19 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                             ],
                           ),
                           const SizedBox(height: 4),
-                          if (lead.logs.first.resistanceRating != null && lead.logs.first.resistanceRating!.isNotEmpty)
+                          if (reed.logs.first.resistanceRating != null && reed.logs.first.resistanceRating!.isNotEmpty)
                             Text(
-                              '抵抗感: ${lead.logs.first.resistanceRating}',
+                              '抵抗感: ${reed.logs.first.resistanceRating}',
                               style: const TextStyle(fontSize: 13, color: Colors.black87),
                             ),
-                          if (lead.logs.first.pitchRating != null && lead.logs.first.pitchRating!.isNotEmpty)
+                          if (reed.logs.first.pitchRating != null && reed.logs.first.pitchRating!.isNotEmpty)
                             Text(
-                              'ピッチ: ${lead.logs.first.pitchRating}',
+                              'ピッチ: ${reed.logs.first.pitchRating}',
                               style: const TextStyle(fontSize: 13, color: Colors.black87),
                             ),
-                          if (lead.logs.first.memo != null && lead.logs.first.memo!.isNotEmpty)
+                          if (reed.logs.first.memo != null && reed.logs.first.memo!.isNotEmpty)
                             Text(
-                              lead.logs.first.memo!,
+                              reed.logs.first.memo!,
                               style: const TextStyle(fontSize: 13, color: Colors.black87),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -1126,12 +1176,11 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     child: Text('調整ログはまだありません', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                   ),
                 ],
-
                 const Divider(height: 20),
                 Align(
                   alignment: Alignment.centerRight,
                   child: ElevatedButton.icon(
-                    onPressed: () => _showAddLogDialog(lead),
+                    onPressed: () => _showAddLogDialog(reed),
                     icon: const Icon(Icons.note_add, size: 18),
                     label: const Text('ログ追加'),
                   ),
@@ -1146,7 +1195,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 }
 
 // ==========================================
-// 【ページ2】素材ストック管理画面 (従来機能を完全維持)
+// 【ページ2】素材ストック管理画面
 // ==========================================
 class MainStockNavigationPage extends StatefulWidget {
   const MainStockNavigationPage({super.key});
@@ -1167,7 +1216,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   List<ShapedCaneStock> _shapedStocks = [];
   List<StapleStock> stapleStocks = [];
   List<TiedStock> _tiedStocks = [];
-  Set<String> _workingLeadIds = {};
+  Set<String> _workingReedIds = {};
 
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
@@ -1200,23 +1249,23 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadWorkingLeadIds();
+    _loadWorkingReedIds();
   }
 
-  Future<void> _loadWorkingLeadIds() async {
+  Future<void> _loadWorkingReedIds() async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('work_leads_data');
     if (jsonString != null) {
       final List decoded = jsonDecode(jsonString);
       setState(() {
-        _workingLeadIds = decoded.map((e) => e['id'].toString()).toSet();
+        _workingReedIds = decoded.map((e) => e['id'].toString()).toSet();
       });
     }
   }
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    await _loadWorkingLeadIds();
+    await _loadWorkingReedIds();
 
     final tubeJson = prefs.getString('tube_stocks');
     if (tubeJson != null) _tubeStocks = (jsonDecode(tubeJson) as List).map((e) => TubeStock.fromJson(e)).toList();
@@ -1270,15 +1319,15 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   Future<void> _sendToCutAndScrapeAction(TiedStock tied) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('work_leads_data');
-    List<WorkLead> currentWorkLeads = [];
+    List<WorkReed> currentWorkReeds = [];
     if (jsonString != null) {
       final List decoded = jsonDecode(jsonString);
-      currentWorkLeads = decoded.map((e) => WorkLead.fromJson(e)).toList();
+      currentWorkReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
     }
 
-    final exists = currentWorkLeads.any((w) => w.id == tied.id);
+    final exists = currentWorkReeds.any((w) => w.id == tied.id);
     if (!exists) {
-      final newWorkLead = WorkLead(
+      final newWorkReed = WorkReed(
         id: tied.id,
         stapleId: tied.stapleId,
         shapedCode: tied.shapedCode,
@@ -1286,13 +1335,14 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         tiedDate: tied.tiedDate,
         currentTotalLength: tied.totalLength,
         qualityLevel: 1,
+        threadColor: tied.threadColor,
         logs: [],
       );
-      currentWorkLeads.add(newWorkLead);
-      await prefs.setString('work_leads_data', jsonEncode(currentWorkLeads.map((e) => e.toJson()).toList()));
+      currentWorkReeds.add(newWorkReed);
+      await prefs.setString('work_leads_data', jsonEncode(currentWorkReeds.map((e) => e.toJson()).toList()));
     }
 
-    await _loadWorkingLeadIds();
+    await _loadWorkingReedIds();
 
     if (mounted) {
       MainRootPage.switchPage(context, 0);
@@ -1300,12 +1350,21 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   List<String> _getAllExistingBrands() {
-    Set<String> brands = {};
+    Set<String> brands = {'Rigotti', 'Tchankaya', 'Alliaud', 'Chiarugi', 'Loree', 'Glotin', 'Guercio'};
     for (var t in _tubeStocks) { if (t.brand.isNotEmpty) brands.add(t.brand); }
     for (var s in _splitStocks) { if (s.brand.isNotEmpty) brands.add(s.brand); }
-    for (var g in _gougedStocks) { brands.add(g.sourceTitle.split(' ')[0]); }
+    for (var g in _gougedStocks) { 
+      if (g.sourceTitle.isNotEmpty) brands.add(g.sourceTitle.split(' ')[0]); 
+    }
     for (var st in stapleStocks) { if (st.brand.isNotEmpty) brands.add(st.brand); }
     return brands.toList();
+  }
+
+  List<String> _getAllExistingPeriods() {
+    Set<String> periods = {'202506', '202601'};
+    for (var t in _tubeStocks) { if (t.purchasePeriod.isNotEmpty) periods.add(t.purchasePeriod); }
+    for (var s in _splitStocks) { if (s.purchasePeriod.isNotEmpty) periods.add(s.purchasePeriod); }
+    return periods.toList();
   }
 
   String _generatePrefix(String brand) {
@@ -1332,7 +1391,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     for (var sh in _shapedStocks) { existingCodes.add(sh.code); }
 
     int maxNum = 0;
-    RegExp reg = RegExp('^' + typeLetter + r'(\d+)' + RegExp.escape(suffix) + r'$');
+    RegExp reg = RegExp('^' + typeLetter + r'(\d+)');
 
     for (var code in existingCodes) {
       var match = reg.firstMatch(code);
@@ -1345,23 +1404,36 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     return '$typeLetter$nextNumStr$suffix';
   }
 
-  void _exportDataToFile() {
+  Future<void> _exportDataToFile() async {
+    final prefs = await SharedPreferences.getInstance();
+    
     final allData = {
-      'tubes': _tubeStocks.map((e) => e.toJson()).toList(),
-      'splits': _splitStocks.map((e) => e.toJson()).toList(),
-      'gouged': _gougedStocks.map((e) => e.toJson()).toList(),
-      'shaped': _shapedStocks.map((e) => e.toJson()).toList(),
-      'staples': stapleStocks.map((e) => e.toJson()).toList(),
-      'tied': _tiedStocks.map((e) => e.toJson()).toList(),
+      'version': '2.0',
       'exportedAt': DateTime.now().toIso8601String(),
+      'tubes': prefs.getString('tube_stocks') != null ? jsonDecode(prefs.getString('tube_stocks')!) : [],
+      'splits': prefs.getString('split_stocks') != null ? jsonDecode(prefs.getString('split_stocks')!) : [],
+      'gouged': prefs.getString('gouged_stocks') != null ? jsonDecode(prefs.getString('gouged_stocks')!) : [],
+      'shaped': prefs.getString('shaped_stocks') != null ? jsonDecode(prefs.getString('shaped_stocks')!) : [],
+      'staples': prefs.getString('staple_stocks') != null ? jsonDecode(prefs.getString('staple_stocks')!) : [],
+      'tied': prefs.getString('tied_stocks') != null ? jsonDecode(prefs.getString('tied_stocks')!) : [],
+      'work_leads': prefs.getString('work_leads_data') != null ? jsonDecode(prefs.getString('work_leads_data')!) : [],
     };
+
     final jsonString = const JsonEncoder.withIndent('  ').convert(allData);
     final bytes = utf8.encode(jsonString);
     final blob = html.Blob([bytes], 'application/json');
     final url = html.Url.createObjectUrlFromBlob(blob);
-    html.AnchorElement(href: url)..setAttribute("download", "ReedNote_Backup_${DateTime.now().toString().split(' ')[0]}.json")..click();
+    
+    html.AnchorElement(href: url)
+      ..setAttribute("download", "ReedNote_Full_Backup_${DateTime.now().toString().split(' ')[0]}.json")
+      ..click();
+      
     html.Url.revokeObjectUrl(url);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('バックアップファイルをダウンロードしました')));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('すべてのデータ（素材・リード・ログ）を完全バックアップしました')),
+      );
+    }
   }
 
   void _importDataFromFile() {
@@ -1371,22 +1443,46 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       final files = uploadInput.files;
       if (files == null || files.isEmpty) return;
       final reader = html.FileReader();
-      reader.onLoadEnd.listen((e) {
+      reader.onLoadEnd.listen((e) async {
         try {
           final data = jsonDecode(reader.result as String) as Map<String, dynamic>;
-          setState(() {
-            if (data.containsKey('tubes')) _tubeStocks = (data['tubes'] as List).map((e) => TubeStock.fromJson(e)).toList();
-            if (data.containsKey('splits')) _splitStocks = (data['splits'] as List).map((e) => SplitCaneStock.fromJson(e)).toList();
-            if (data.containsKey('gouged')) _gougedStocks = (data['gouged'] as List).map((e) => GougedCaneStock.fromJson(e)).toList();
-            if (data.containsKey('shaped')) _shapedStocks = (data['shaped'] as List).map((e) => ShapedCaneStock.fromJson(e)).toList();
-            if (data.containsKey('staples')) stapleStocks = (data['staples'] as List).map((e) => StapleStock.fromJson(e)).toList();
-            if (data.containsKey('tied')) _tiedStocks = (data['tied'] as List).map((e) => TiedStock.fromJson(e)).toList();
-          });
-          _saveData();
-          _loadWorkingLeadIds();
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('データを正常に読み込みました！')));
+          final prefs = await SharedPreferences.getInstance();
+
+          if (data.containsKey('tubes')) {
+            await prefs.setString('tube_stocks', jsonEncode(data['tubes']));
+          }
+          if (data.containsKey('splits')) {
+            await prefs.setString('split_stocks', jsonEncode(data['splits']));
+          }
+          if (data.containsKey('gouged')) {
+            await prefs.setString('gouged_stocks', jsonEncode(data['gouged']));
+          }
+          if (data.containsKey('shaped')) {
+            await prefs.setString('shaped_stocks', jsonEncode(data['shaped']));
+          }
+          if (data.containsKey('staples')) {
+            await prefs.setString('staple_stocks', jsonEncode(data['staples']));
+          }
+          if (data.containsKey('tied')) {
+            await prefs.setString('tied_stocks', jsonEncode(data['tied']));
+          }
+          if (data.containsKey('work_leads')) {
+            await prefs.setString('work_leads_data', jsonEncode(data['work_leads']));
+          }
+
+          await _loadData();
+          
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('すべてのデータを完全に復元しました！')),
+            );
+          }
         } catch (err) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('ファイルの読み込みに失敗しました: $err')));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('ファイルの読み込みに失敗しました: $err')),
+            );
+          }
         }
       });
       reader.readAsText(files[0]);
@@ -1395,20 +1491,21 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   void _openAddDialogForCurrentTab() {
     final existingBrands = _getAllExistingBrands();
+    final existingPeriods = _getAllExistingPeriods();
     final existingVendors = _tubeStocks.map((e) => e.vendor ?? '').where((e) => e.isNotEmpty).toSet().toList();
 
     switch (_tabController.index) {
       case 0:
-        StockDialogs.showAddTubeDialog(context: context, existingBrands: existingBrands, existingVendors: existingVendors, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _tubeStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddTubeDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, existingVendors: existingVendors, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _tubeStocks.add(newStock)); _saveData(); });
         break;
       case 1:
-        StockDialogs.showAddSplitDialog(context: context, existingBrands: existingBrands, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _splitStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddSplitDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _splitStocks.add(newStock)); _saveData(); });
         break;
       case 2:
-        StockDialogs.showAddGougedDialog(context: context, existingBrands: existingBrands, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _gougedStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddGougedDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _gougedStocks.add(newStock)); _saveData(); });
         break;
       case 3:
-        StockDialogs.showAddShapedDialog(context: context, existingBrands: existingBrands, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _shapedStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddShapedDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _shapedStocks.add(newStock)); _saveData(); });
         break;
       case 4:
         StockDialogs.showAddStapleDialog(context: context, existingBrands: existingBrands, onRegistered: (newStaples) { setState(() => stapleStocks.addAll(newStaples)); _saveData(); });
@@ -1487,11 +1584,11 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             Row(
               children: [
                 Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInStock ? Colors.black : Colors.grey.shade600))),
-                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), onPressed: onEdit),
                 if (!isInStock) ...[
                   Container(margin: const EdgeInsets.only(right: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)), child: const Text('在庫なし', style: TextStyle(fontSize: 12, color: Colors.white))),
-                  IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: onDelete),
                 ],
+                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), tooltip: '編集', onPressed: onEdit),
+                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: '削除', onPressed: onDelete),
               ],
             ),
             const SizedBox(height: 4),
@@ -1521,7 +1618,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final items = _showOnlyInStock ? _tubeStocks.where((e) => e.remainingCount > 0).toList() : _tubeStocks;
     if (items.isEmpty) return const Center(child: Text('表示する丸材ストックがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final item = items[i];
@@ -1548,7 +1645,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final items = _showOnlyInStock ? _splitStocks.where((e) => e.remainingCount > 0).toList() : _splitStocks;
     if (items.isEmpty) return const Center(child: Text('表示する半カマボコストックがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final item = items[i];
@@ -1575,13 +1672,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final items = _showOnlyInStock ? _gougedStocks.where((e) => e.remainingCount > 0).toList() : _gougedStocks;
     if (items.isEmpty) return const Center(child: Text('表示するカマボコストックがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final item = items[i];
         return _buildStockCard(
           title: item.displayTitle,
-          subtitle: 'マシン: ${item.machine} | 日付: ${item.gougingDate}\nメモ: ${item.memo ?? "-"}',
+          subtitle: '太さ: ${item.diameter} | マシン: ${item.machine} | 日付: ${item.gougingDate}\nメモ: ${item.memo ?? "-"}',
           count: item.remainingCount,
           onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
           onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
@@ -1602,13 +1699,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final items = _showOnlyInStock ? _shapedStocks.where((e) => e.remainingCount > 0).toList() : _shapedStocks;
     if (items.isEmpty) return const Center(child: Text('表示する舟形ストックがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final item = items[i];
         return _buildStockCard(
           title: item.displayTitle,
-          subtitle: 'シェーパー: ${item.shaper} | 日付: ${item.shapingDate}\nメモ: ${item.memo ?? "-"}',
+          subtitle: '太さ: ${item.diameter} | シェーパー: ${item.shaper} | 日付: ${item.shapingDate}\nメモ: ${item.memo ?? "-"}',
           count: item.remainingCount,
           onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
           onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
@@ -1636,7 +1733,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final items = _showOnlyInStock ? sortedList.where((e) => e.status == StapleStatus.unused).toList() : sortedList;
     if (items.isEmpty) return const Center(child: Text('表示するチューブ(Staple)ストックがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
       itemBuilder: (context, i) {
         final item = items[i];
@@ -1656,8 +1753,8 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: isUnused ? Colors.green.shade100 : Colors.orange.shade100, borderRadius: BorderRadius.circular(4)), child: Text(item.status.label, style: TextStyle(fontSize: 12, color: isUnused ? Colors.green.shade900 : Colors.orange.shade900, fontWeight: FontWeight.bold))),
-                        IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), onPressed: () => StockDialogs.showEditStapleDialog(context: context, staple: item, existingBrands: _getAllExistingBrands(), onSaved: () { setState(() {}); _saveData(); })),
-                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: () => _confirmDelete(() { setState(() => stapleStocks.remove(item)); _saveData(); })),
+                        IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), tooltip: '編集', onPressed: () => StockDialogs.showEditStapleDialog(context: context, staple: item, existingBrands: _getAllExistingBrands(), onSaved: () { setState(() {}); _saveData(); })),
+                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: '削除', onPressed: () => _confirmDelete(() { setState(() => stapleStocks.remove(item)); _saveData(); })),
                       ],
                     ),
                   ],
@@ -1677,11 +1774,11 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   Widget _buildTiedStockTab() {
     if (_tiedStocks.isEmpty) return const Center(child: Text('糸巻き(Tied)されたリードがありません'));
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: _tiedStocks.length,
       itemBuilder: (context, i) {
         final item = _tiedStocks[i];
-        final bool isWorking = _workingLeadIds.contains(item.id);
+        final bool isWorking = _workingReedIds.contains(item.id);
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -1692,14 +1789,45 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('チューブ: ${item.stapleId}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
-                    Text('全長: ${item.totalLength} mm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Text(item.stapleId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('全長: ${item.totalLength} mm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          tooltip: '糸巻きストックを削除',
+                          onPressed: () => _confirmDelete(() {
+                            setState(() => _tiedStocks.remove(item));
+                            _saveData();
+                          }),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 const Divider(height: 16),
                 Text('ケーン: ${item.shapedTitle} (${item.shapedCode})'),
-                const SizedBox(height: 4),
-                Text('糸巻き日: ${item.tiedDate}${item.threadColor != null ? " | 糸色: ${item.threadColor}" : ""}'),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Text('糸巻き日: ${item.tiedDate}'),
+                    if (item.threadColor != null && item.threadColor!.isNotEmpty) ...[
+                      const Text(' | 糸: '),
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: getThreadColor(item.threadColor),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text('${item.threadColor}'),
+                    ],
+                  ],
+                ),
                 if (item.memo != null && item.memo!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text('メモ: ${item.memo}', style: TextStyle(color: Colors.grey.shade700)),
