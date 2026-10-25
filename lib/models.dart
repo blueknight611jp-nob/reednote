@@ -319,6 +319,7 @@ class TiedStock {
 class ScrapeLog {
   final String id;
   String date;                // 記録日 (YYYY-MM-DD)
+  int? level;                 // ★追加: その時点のコンディションレベル (1〜5)
   String? totalLength;        // その時点の全長 (例: 71.5mm)
   String? scrapeLength;       // スクレープ長 (例: 10.5mm)
   String? pitchRating;        // ピッチ/音程評価
@@ -328,6 +329,7 @@ class ScrapeLog {
   ScrapeLog({
     required this.id,
     required this.date,
+    this.level,
     this.totalLength,
     this.scrapeLength,
     this.pitchRating,
@@ -338,6 +340,7 @@ class ScrapeLog {
   Map<String, dynamic> toJson() => {
         'id': id,
         'date': date,
+        'level': level,
         'totalLength': totalLength,
         'scrapeLength': scrapeLength,
         'pitchRating': pitchRating,
@@ -348,6 +351,7 @@ class ScrapeLog {
   factory ScrapeLog.fromJson(Map<String, dynamic> json) => ScrapeLog(
         id: json['id'] ?? DateTime.now().toString(),
         date: json['date'] ?? DateTime.now().toString().split(' ')[0],
+        level: json['level'],
         totalLength: json['totalLength'],
         scrapeLength: json['scrapeLength'],
         pitchRating: json['pitchRating'],

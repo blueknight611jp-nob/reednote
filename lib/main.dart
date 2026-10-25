@@ -141,6 +141,34 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     await prefs.setString('work_leads_data', jsonString);
   }
 
+  // 分解確認ダイアログ
+  void _confirmAndDismantle(WorkLead lead) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('リードの分解とチューブ回収'),
+        content: Text('[チューブ: ${lead.stapleId}] ${lead.shapedTitle}\n\nこのリードを分解しますか？\n※チューブは素材ストックの「未使用」に自動で戻り、このリードは一覧から削除されます。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('キャンセル'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              _handleDismantle(lead);
+            },
+            child: const Text('分解する'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // レベル0（分解）に変更された場合のチューブ返却処理
   Future<void> _handleDismantle(WorkLead lead) async {
     setState(() {
@@ -180,7 +208,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     final stapleController = TextEditingController();
     final lengthController = TextEditingController(text: '71.0');
     final memoController = TextEditingController();
-    int selectedLevel = 4; // 初期Lv.4（2軍〜）など
+    int selectedLevel = 4; // 初期Lv.4
 
     showDialog(
       context: context,
@@ -215,7 +243,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                           const SizedBox(width: 8),
                           DropdownButton<int>(
                             value: selectedLevel,
-                            items: [3, 4, 5].map((lvl) {
+                            items: [5, 4, 3].map((lvl) {
                               return DropdownMenuItem(
                                 value: lvl,
                                 child: Text('Lv. $lvl ${"★" * lvl} (${lvl == 5 ? "1軍・本番OK" : lvl == 4 ? "2軍・結構いける" : "3軍・練習用"})'),
@@ -266,6 +294,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                           ScrapeLog(
                             id: DateTime.now().millisecondsSinceEpoch.toString(),
                             date: dateStr,
+                            level: selectedLevel,
                             totalLength: lengthController.text,
                             memo: '【購入時】 ${memoController.text}',
                           ),
@@ -318,11 +347,11 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          const Text('コンディション: '),
+                          const Text('この時のレベル: '),
                           const SizedBox(width: 8),
                           DropdownButton<int>(
                             value: currentLevel,
-                            items: List.generate(6, (i) => i).map((lvl) {
+                            items: List.generate(6, (i) => i).reversed.map((lvl) {
                               String label = '';
                               if (lvl == 0) label = 'Lv.0 (分解・チューブ回収)';
                               if (lvl == 1) label = 'Lv.1 (荒削り)';
@@ -359,6 +388,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     final newLog = ScrapeLog(
                       id: DateTime.now().millisecondsSinceEpoch.toString(),
                       date: dateController.text,
+                      level: currentLevel,
                       totalLength: lengthController.text,
                       resistanceRating: resistanceController.text,
                       pitchRating: pitchController.text,
@@ -375,9 +405,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     _saveWorkLeads();
                     Navigator.pop(context);
 
-                    // もしレベル0に設定された場合は即座に分解処理へ
                     if (currentLevel == 0) {
-                      _handleDismantle(lead);
+                      _confirmAndDismantle(lead);
                     } else {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('ログを追加しました')),
@@ -401,47 +430,74 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     final resistanceController = TextEditingController(text: log.resistanceRating ?? '');
     final pitchController = TextEditingController(text: log.pitchRating ?? '');
     final memoController = TextEditingController(text: log.memo ?? '');
+    int editLevel = log.level ?? lead.qualityLevel;
 
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('ログを編集'),
-          content: SingleChildScrollView(
-            child: SizedBox(
-              width: 400,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(controller: dateController, decoration: const InputDecoration(labelText: '日付')),
-                  TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
-                  TextField(controller: resistanceController, decoration: const InputDecoration(labelText: '抵抗感')),
-                  TextField(controller: pitchController, decoration: const InputDecoration(labelText: 'ピッチ')),
-                  const SizedBox(height: 8),
-                  TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ', border: OutlineInputBorder()), maxLines: 3),
-                ],
+        return StatefulBuilder(
+          builder: (context, setEditState) {
+            return AlertDialog(
+              title: const Text('ログを編集'),
+              content: SingleChildScrollView(
+                child: SizedBox(
+                  width: 400,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(controller: dateController, decoration: const InputDecoration(labelText: '日付')),
+                      TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Text('レベル: '),
+                          const SizedBox(width: 8),
+                          DropdownButton<int>(
+                            value: editLevel,
+                            items: List.generate(6, (i) => i).reversed.map((lvl) {
+                              return DropdownMenuItem(
+                                value: lvl,
+                                child: Text(lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}'),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setEditState(() => editLevel = val);
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                      TextField(controller: resistanceController, decoration: const InputDecoration(labelText: '抵抗感')),
+                      TextField(controller: pitchController, decoration: const InputDecoration(labelText: 'ピッチ')),
+                      const SizedBox(height: 8),
+                      TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ', border: OutlineInputBorder()), maxLines: 3),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  log.date = dateController.text;
-                  log.totalLength = lengthController.text;
-                  log.resistanceRating = resistanceController.text;
-                  log.pitchRating = pitchController.text;
-                  log.memo = memoController.text;
-                });
-                _saveWorkLeads();
-                Navigator.pop(context);
-                Navigator.pop(context);
-                _showLogHistoryDialog(lead);
-              },
-              child: const Text('更新'),
-            ),
-          ],
+              actions: [
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+                ElevatedButton(
+                  onPressed: () {
+                    setState(() {
+                      log.date = dateController.text;
+                      log.level = editLevel;
+                      log.totalLength = lengthController.text;
+                      log.resistanceRating = resistanceController.text;
+                      log.pitchRating = pitchController.text;
+                      log.memo = memoController.text;
+                    });
+                    _saveWorkLeads();
+                    Navigator.pop(context);
+                    Navigator.pop(context);
+                    _showLogHistoryDialog(lead);
+                  },
+                  child: const Text('更新'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -465,6 +521,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         itemCount: lead.logs.length,
                         itemBuilder: (context, index) {
                           final log = lead.logs[index];
+                          final int? logLvl = log.level;
                           return Card(
                             margin: const EdgeInsets.only(bottom: 8),
                             child: Padding(
@@ -475,11 +532,28 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text('日付: ${log.date}', style: const TextStyle(fontWeight: FontWeight.bold)),
                                       Row(
                                         children: [
-                                          if (log.totalLength != null && log.totalLength!.isNotEmpty)
-                                            Text('全長: ${log.totalLength}mm  ', style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
+                                          Text('日付: ${log.date}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          if (logLvl != null) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.shade100,
+                                                borderRadius: BorderRadius.circular(4),
+                                                border: Border.all(color: Colors.amber.shade400),
+                                              ),
+                                              child: Text(
+                                                'Lv.$logLvl ${"★" * logLvl}',
+                                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      Row(
+                                        children: [
                                           IconButton(
                                             icon: const Icon(Icons.edit, size: 18, color: Colors.blueGrey),
                                             onPressed: () => _showEditLogDialog(lead, log),
@@ -496,8 +570,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                                       ),
                                     ],
                                   ),
-                                  if (log.memo != null && log.memo!.isNotEmpty)
+                                  if (log.resistanceRating != null && log.resistanceRating!.isNotEmpty)
+                                    Text('抵抗感: ${log.resistanceRating}'),
+                                  if (log.pitchRating != null && log.pitchRating!.isNotEmpty)
+                                    Text('ピッチ: ${log.pitchRating}'),
+                                  if (log.memo != null && log.memo!.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
                                     Text('メモ: ${log.memo}', style: const TextStyle(color: Colors.black87)),
+                                  ],
                                 ],
                               ),
                             ),
@@ -560,7 +640,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   }
 
   Widget _buildLeadList(int level) {
-    // レベルが一致するリードのみ抽出 (Lv.0の分解済は除外される)
     final leads = _workLeads.where((l) => l.qualityLevel == level).toList();
 
     if (leads.isEmpty) {
@@ -594,7 +673,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
-                    // レベル変更用ドロップダウン (カード上でも即座に変更可能)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
@@ -606,7 +684,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         value: lead.qualityLevel,
                         isDense: true,
                         underline: const SizedBox.shrink(),
-                        items: List.generate(6, (i) => i).map((lvl) {
+                        items: List.generate(6, (i) => i).reversed.map((lvl) {
                           return DropdownMenuItem(
                             value: lvl,
                             child: Text(
@@ -618,7 +696,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         onChanged: (newLevel) {
                           if (newLevel != null) {
                             if (newLevel == 0) {
-                              _handleDismantle(lead);
+                              _confirmAndDismantle(lead);
                             } else {
                               setState(() {
                                 lead.qualityLevel = newLevel;
@@ -641,7 +719,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                 
                 const SizedBox(height: 8),
 
-                // 最新ログ表示 ＆ クリックで全履歴ポップアップ
                 if (lead.logs.isNotEmpty) ...[
                   InkWell(
                     onTap: () => _showLogHistoryDialog(lead),
@@ -660,15 +737,55 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('最新ログ (${lead.logs.first.date})', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber.shade900)),
-                              Text('全 ${lead.logs.length} 件 ↗', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.amber.shade900)),
+                              Text(
+                                '最新ログ (${lead.logs.first.date})',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  color: Colors.amber.shade900,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Text(
+                                    '全 ${lead.logs.length} 件',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12,
+                                      color: Colors.amber.shade900,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  const Icon(Icons.open_in_full, size: 14, color: Colors.amber),
+                                ],
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
+                          if (lead.logs.first.resistanceRating != null && lead.logs.first.resistanceRating!.isNotEmpty)
+                            Text(
+                              '抵抗感: ${lead.logs.first.resistanceRating}',
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                            ),
+                          if (lead.logs.first.pitchRating != null && lead.logs.first.pitchRating!.isNotEmpty)
+                            Text(
+                              'ピッチ: ${lead.logs.first.pitchRating}',
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                            ),
                           if (lead.logs.first.memo != null && lead.logs.first.memo!.isNotEmpty)
-                            Text(lead.logs.first.memo!, style: const TextStyle(fontSize: 13, color: Colors.black87), maxLines: 2, overflow: TextOverflow.ellipsis)
-                          else
-                            const Text('メモなし', style: TextStyle(fontSize: 13, color: Colors.grey)),
+                            Text(
+                              lead.logs.first.memo!,
+                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          if ((lead.logs.first.resistanceRating == null || lead.logs.first.resistanceRating!.isEmpty) &&
+                              (lead.logs.first.pitchRating == null || lead.logs.first.pitchRating!.isEmpty) &&
+                              (lead.logs.first.memo == null || lead.logs.first.memo!.isEmpty))
+                            const Text(
+                              '詳細メモなし',
+                              style: TextStyle(fontSize: 13, color: Colors.grey, fontStyle: FontStyle.italic),
+                            ),
                         ],
                       ),
                     ),
@@ -840,7 +957,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         shapedTitle: tied.shapedTitle,
         tiedDate: tied.tiedDate,
         currentTotalLength: tied.totalLength,
-        qualityLevel: 1, // 新規作成時はLv.1（荒削り）スタート
+        qualityLevel: 1,
         logs: [],
       );
       currentWorkLeads.add(newWorkLead);
