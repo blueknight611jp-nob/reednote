@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:html' as html; // Webでのファイル入出力用
+import 'dart:html' as html; // Webでのファイル入出力・画像選択用
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'models.dart';
@@ -172,11 +172,10 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   // レベル0（分解）に変更された場合のチューブ返却処理
   Future<void> _handleDismantle(WorkLead lead) async {
     setState(() {
-      _workLeads.remove(lead); // ページ1のリストから除外
+      _workLeads.remove(lead);
     });
     await _saveWorkLeads();
 
-    // 該当するチューブ(Staple)を素材ストック側で未使用(unused)に復元
     final prefs = await SharedPreferences.getInstance();
     final stapleJson = prefs.getString('staple_stocks');
     if (stapleJson != null) {
@@ -202,13 +201,63 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     }
   }
 
+  // 写真を追加する処理 (ファイル選択からBase64変換して追加)
+  void _pickAndAddPhoto(WorkLead lead) {
+    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    uploadInput.click();
+    uploadInput.onChange.listen((e) {
+      final files = uploadInput.files;
+      if (files == null || files.isEmpty) return;
+      final reader = html.FileReader();
+      reader.onLoadEnd.listen((e) {
+        final base64String = reader.result as String?;
+        if (base64String != null) {
+          setState(() {
+            lead.photosBase64.add(base64String);
+          });
+          _saveWorkLeads();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('写真を追加しました')),
+          );
+        }
+      });
+      reader.readAsDataUrl(files[0]);
+    });
+  }
+
+  // 写真を拡大表示するポップアップ
+  void _showPhotoPreview(String base64Image) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Stack(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Image.memory(base64Decode(base64Image.split(',').last)),
+            ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.black54),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // 市販・完成品リードの追加ダイアログ
   void _showAddCommercialLeadDialog() {
     final brandController = TextEditingController();
     final stapleController = TextEditingController();
     final lengthController = TextEditingController(text: '71.0');
     final memoController = TextEditingController();
-    int selectedLevel = 4; // 初期Lv.4
+    int selectedLevel = 4;
 
     showDialog(
       context: context,
@@ -717,7 +766,70 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                 const SizedBox(height: 8),
                 Text('コード: ${lead.shapedCode}  /  登録日: ${lead.tiedDate}'),
                 
-                const SizedBox(height: 8),
+                const SizedBox(height: 12),
+
+                // 写真セクション (サムネイル表示 ＆ 追加ボタン)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (int i = 0; i < lead.photosBase64.length; i++)
+                            Stack(
+                              children: [
+                                InkWell(
+                                  onTap: () => _showPhotoPreview(lead.photosBase64[i]),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Image.memory(
+                                      base64Decode(lead.photosBase64[i].split(',').last),
+                                      width: 60,
+                                      height: 60,
+                                      fit: BoxFit.cover,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: InkWell(
+                                    onTap: () {
+                                      setState(() {
+                                        lead.photosBase64.removeAt(i);
+                                      });
+                                      _saveWorkLeads();
+                                    },
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black54,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      padding: const EdgeInsets.all(2),
+                                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(60, 60),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                            ),
+                            icon: const Icon(Icons.add_a_photo, size: 18),
+                            label: const Text('写真追加', style: TextStyle(fontSize: 11)),
+                            onPressed: () => _pickAndAddPhoto(lead),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 12),
 
                 if (lead.logs.isNotEmpty) ...[
                   InkWell(
@@ -778,13 +890,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                               style: const TextStyle(fontSize: 13, color: Colors.black87),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                            ),
-                          if ((lead.logs.first.resistanceRating == null || lead.logs.first.resistanceRating!.isEmpty) &&
-                              (lead.logs.first.pitchRating == null || lead.logs.first.pitchRating!.isEmpty) &&
-                              (lead.logs.first.memo == null || lead.logs.first.memo!.isEmpty))
-                            const Text(
-                              '詳細メモなし',
-                              style: TextStyle(fontSize: 13, color: Colors.grey, fontStyle: FontStyle.italic),
                             ),
                         ],
                       ),

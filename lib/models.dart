@@ -373,6 +373,7 @@ class WorkLead {
   final String tiedDate;
   String currentTotalLength; // 現在の全長
   int qualityLevel;          // コンディションレベル (0〜5)
+  String? photoBase64;        // ★追加: リードの写真をBase64形式で保持
   List<ScrapeLog> logs;      // 履歴リスト
 
   WorkLead({
@@ -383,6 +384,7 @@ class WorkLead {
     required this.tiedDate,
     required this.currentTotalLength,
     this.qualityLevel = 1, // デフォルトLv.1
+    this.photoBase64,
     required this.logs,
   });
 
@@ -394,6 +396,7 @@ class WorkLead {
         'tiedDate': tiedDate,
         'currentTotalLength': currentTotalLength,
         'qualityLevel': qualityLevel,
+        'photoBase64': photoBase64,
         'logs': logs.map((e) => e.toJson()).toList(),
       };
 
