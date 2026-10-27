@@ -256,7 +256,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   }
 
   void _pickAndAddPhoto(WorkReed reed) {
-    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    final uploadInput = html.FileUploadInputElement()..accept = 'images/*';
     uploadInput.click();
     uploadInput.onChange.listen((e) {
       final files = uploadInput.files;
