@@ -238,7 +238,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       
       bool updated = false;
       for (var st in staples) {
-        if (st.stapleId == reed.stapleId) {
+        if (st.id == reed.stapleId) {
           st.status = StapleStatus.unused;
           updated = true;
           break;
@@ -248,7 +248,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('リードを分解しました。チューブ[${reed.stapleId}]を未使用ストックへ戻しました。')),
+            const SnackBar(content: Text('リードを分解しました。チューブを未使用ストックへ戻しました。')),
           );
         }
       }
@@ -303,15 +303,28 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   }
 
   void _showWorkReedDialog({WorkReed? existingReed}) {
-    String selectedModel = existingReed != null 
-        ? (existingReed.shapedTitle.contains(' ') ? existingReed.shapedTitle.split(' ').first : 'Chiarugi 2') 
-        : 'Chiarugi 2';
+    final List<String> availableModels = ['Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree', 'Other'];
     
-    int qualityLevel = existingReed?.qualityLevel ?? 1;
+    String initialModel = 'Chiarugi 2';
+    if (existingReed != null) {
+      for (var m in availableModels) {
+        if (existingReed.shapedTitle.startsWith(m)) {
+          initialModel = m;
+          break;
+        }
+      }
+    }
+    String selectedModel = initialModel;
+    
+    int qualityLevel = existingReed?.qualityLevel ?? _levels[_subTabController.index];
     String totalLength = existingReed?.currentTotalLength ?? '71.0';
     List<String> photos = existingReed != null ? List.from(existingReed.photosBase64) : [];
 
-    final lengthController = TextEditingController(text: '46');
+    final lengthController = TextEditingController(
+      text: existingReed != null && existingReed.shapedTitle.contains('mm') 
+          ? RegExp(r'(\d+)mm').firstMatch(existingReed.shapedTitle)?.group(1) ?? '46'
+          : '46'
+    );
     final markController = TextEditingController(text: 'a');
     final totalLengthController = TextEditingController(text: totalLength);
     final memoController = TextEditingController();
@@ -337,19 +350,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       }
     }
 
-    if (existingReed != null) {
-      if (existingReed.stapleId.contains('46')) {
-        lengthController.text = '46';
-      } else if (existingReed.stapleId.contains('47')) {
-        lengthController.text = '47';
-      } else if (existingReed.stapleId.contains('45')) {
-        lengthController.text = '45';
-      }
-      if (existingReed.stapleId.isNotEmpty) {
-        markController.text = existingReed.stapleId.substring(existingReed.stapleId.length - 1);
-      }
-    }
-
     showDialog(
       context: context,
       builder: (context) {
@@ -369,7 +369,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       DropdownButtonFormField<String>(
                         value: selectedModel,
                         decoration: const InputDecoration(labelText: 'ステープルモデル'),
-                        items: ['Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree', 'Other']
+                        items: availableModels
                             .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                             .toList(),
                         onChanged: (val) {
@@ -422,7 +422,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         onChanged: (_) => setDialogState(() {}),
                       ),
                       const SizedBox(height: 6),
-                      Text('自動IDプレビュー: $previewId', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
+                      Text('マーク表記: $previewId', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -564,48 +564,69 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   child: const Text('キャンセル'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
                     final dateStr = DateTime.now().toString().split(' ')[0];
                     final shapedTitleText = '$selectedModel ${lengthController.text}mm';
                     final combinedThreadColor = '$selectedType$selectedColor';
 
-                    setState(() {
-                      if (existingReed == null) {
-                        final newReed = WorkReed(
-                          id: DateTime.now().millisecondsSinceEpoch.toString(),
-                          stapleId: previewId,
-                          shapedCode: 'ダイレクト登録',
-                          shapedTitle: shapedTitleText,
-                          tiedDate: dateStr,
-                          currentTotalLength: totalLengthController.text,
-                          qualityLevel: qualityLevel,
-                          threadColor: combinedThreadColor,
-                          photosBase64: photos,
-                          logs: [
-                            if (memoController.text.isNotEmpty)
-                              ScrapeLog(
-                                id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                date: dateStr,
-                                level: qualityLevel,
-                                totalLength: totalLengthController.text,
-                                memo: '【初期登録】 ${memoController.text}',
-                              ),
-                          ],
-                        );
+                    if (existingReed == null) {
+                      final newStapleId = DateTime.now().microsecondsSinceEpoch.toString();
+                      final prefs = await SharedPreferences.getInstance();
+                      final stapleJson = prefs.getString('staple_stocks');
+                      List<StapleStock> staples = [];
+                      if (stapleJson != null) {
+                        final List decoded = jsonDecode(stapleJson);
+                        staples = decoded.map((e) => StapleStock.fromJson(e)).toList();
+                      }
+                      
+                      staples.add(StapleStock(
+                        id: newStapleId,
+                        brand: selectedModel.contains(' ') ? selectedModel.split(' ').first : selectedModel,
+                        model: selectedModel.contains(' ') ? selectedModel.split(' ').last : '',
+                        length: lengthController.text,
+                        mark: markController.text,
+                        status: StapleStatus.tied,
+                        memo: 'ダイレクト登録から自動作成',
+                      ));
+                      await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
+
+                      final newReed = WorkReed(
+                        id: DateTime.now().microsecondsSinceEpoch.toString(),
+                        stapleId: newStapleId,
+                        shapedCode: 'ダイレクト登録',
+                        shapedTitle: shapedTitleText,
+                        tiedDate: dateStr,
+                        currentTotalLength: totalLengthController.text,
+                        qualityLevel: qualityLevel,
+                        threadColor: combinedThreadColor,
+                        photosBase64: photos,
+                        logs: [
+                          if (memoController.text.isNotEmpty)
+                            ScrapeLog(
+                              id: DateTime.now().microsecondsSinceEpoch.toString(),
+                              date: dateStr,
+                              level: qualityLevel,
+                              totalLength: totalLengthController.text,
+                              memo: '【初期登録】 ${memoController.text}',
+                            ),
+                        ],
+                      );
+                      setState(() {
                         _workReeds.insert(0, newReed);
-                      } else {
-                        existingReed.stapleId = previewId;
+                      });
+                    } else {
+                      setState(() {
                         existingReed.shapedTitle = shapedTitleText;
                         existingReed.qualityLevel = qualityLevel;
                         existingReed.currentTotalLength = totalLengthController.text;
                         existingReed.threadColor = combinedThreadColor;
                         existingReed.photosBase64 = photos;
-                      }
-                    });
+                      });
+                    }
                     _saveWorkReeds();
                     Navigator.pop(context);
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(existingReed == null ? '[$previewId] を登録しました' : 'リード情報を更新しました')),
+                      SnackBar(content: Text(existingReed == null ? 'リードを登録しました' : 'リード情報を更新しました')),
                     );
                   },
                   child: const Text('保存'),
@@ -632,7 +653,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              title: Text('[${reed.stapleId}] 削り・試奏ログを追加'),
+              title: const Text('削り・試奏ログを追加'),
               content: SingleChildScrollView(
                 child: SizedBox(
                   width: 400,
@@ -683,7 +704,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                 ElevatedButton(
                   onPressed: () {
                     final newLog = ScrapeLog(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
+                      id: DateTime.now().microsecondsSinceEpoch.toString(),
                       date: dateController.text,
                       level: currentLevel,
                       totalLength: lengthController.text,
@@ -806,7 +827,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         return StatefulBuilder(
           builder: (context, setHistoryState) {
             return AlertDialog(
-              title: Text('[${reed.stapleId}] 調整ログ全履歴 (${reed.logs.length}件)'),
+              title: Text('調整ログ全履歴 (${reed.logs.length}件)'),
               content: SizedBox(
                 width: 500,
                 height: 400,
@@ -964,19 +985,24 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   children: [
                     Expanded(
                       child: Text(
-                        '[${reed.stapleId}] ${reed.shapedTitle}',
+                        '${reed.shapedTitle}',
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.edit, size: 20, color: Colors.blueGrey),
-                      tooltip: 'リード情報を編集',
-                      onPressed: () => _showWorkReedDialog(existingReed: reed),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                      tooltip: 'リードを削除',
-                      onPressed: () => _confirmAndDeleteReed(reed),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
+                          tooltip: 'リード情報を編集',
+                          onPressed: () => _showWorkReedDialog(existingReed: reed),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                          tooltip: 'リードを削除',
+                          onPressed: () => _confirmAndDeleteReed(reed),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -1297,9 +1323,14 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     showDialog(
       context: context,
       builder: (context) {
+        final staple = stapleStocks.firstWhere(
+          (s) => s.id == tied.stapleId,
+          orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+        );
+
         return AlertDialog(
           title: const Text('管理・調整部屋へ登録'),
-          content: Text('[チューブ: ${tied.stapleId}]\nこのリードを「Lv.1（荒削り）」として登録し、ページ1へ移動しますか？'),
+          content: Text('[チューブ: ${staple.displayTitle}]\nこのリードを「Lv.1（荒削り）」として登録し、ページ1へ移動しますか？'),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
             ElevatedButton(
@@ -1431,7 +1462,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     html.Url.revokeObjectUrl(url);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('すべてのデータ（素材・リード・ログ）を完全バックアップしました')),
+        const SnackBar(content: Text('すべてのデータを完全バックアップしました')),
       );
     }
   }
@@ -1448,27 +1479,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           final data = jsonDecode(reader.result as String) as Map<String, dynamic>;
           final prefs = await SharedPreferences.getInstance();
 
-          if (data.containsKey('tubes')) {
-            await prefs.setString('tube_stocks', jsonEncode(data['tubes']));
-          }
-          if (data.containsKey('splits')) {
-            await prefs.setString('split_stocks', jsonEncode(data['splits']));
-          }
-          if (data.containsKey('gouged')) {
-            await prefs.setString('gouged_stocks', jsonEncode(data['gouged']));
-          }
-          if (data.containsKey('shaped')) {
-            await prefs.setString('shaped_stocks', jsonEncode(data['shaped']));
-          }
-          if (data.containsKey('staples')) {
-            await prefs.setString('staple_stocks', jsonEncode(data['staples']));
-          }
-          if (data.containsKey('tied')) {
-            await prefs.setString('tied_stocks', jsonEncode(data['tied']));
-          }
-          if (data.containsKey('work_leads')) {
-            await prefs.setString('work_leads_data', jsonEncode(data['work_leads']));
-          }
+          if (data.containsKey('tubes')) await prefs.setString('tube_stocks', jsonEncode(data['tubes']));
+          if (data.containsKey('splits')) await prefs.setString('split_stocks', jsonEncode(data['splits']));
+          if (data.containsKey('gouged')) await prefs.setString('gouged_stocks', jsonEncode(data['gouged']));
+          if (data.containsKey('shaped')) await prefs.setString('shaped_stocks', jsonEncode(data['shaped']));
+          if (data.containsKey('staples')) await prefs.setString('staple_stocks', jsonEncode(data['staples']));
+          if (data.containsKey('tied')) await prefs.setString('tied_stocks', jsonEncode(data['tied']));
+          if (data.containsKey('work_leads')) await prefs.setString('work_leads_data', jsonEncode(data['work_leads']));
 
           await _loadData();
           
@@ -1634,7 +1651,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
             icon: const Icon(Icons.call_split, size: 16),
             label: const Text('半カマボコ(P)へ加工'),
-            onPressed: () => StockDialogs.showProcessTubeToSplitDialog(context: context, tube: item, getNextCode: _getNextCode, onProcessed: (newSplit) { setState(() => _splitStocks.add(newSplit)); _saveData(); }),
+            onPressed: () => StockDialogs.showProcessTubeToSplitDialog(
+              context: context,
+              tube: item,
+              getNextCode: _getNextCode,
+              onProcessed: (newSplit) {
+                setState(() => _splitStocks.add(newSplit));
+                _saveData();
+                _tabController.animateTo(1); // ★ 半カマボコタブへ自動移動
+              },
+            ),
           ),
         );
       },
@@ -1661,7 +1687,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
             icon: const Icon(Icons.density_medium, size: 16),
             label: const Text('カマボコ(G)へ加工'),
-            onPressed: () => StockDialogs.showProcessSplitToGougedDialog(context: context, split: item, getNextCode: _getNextCode, onProcessed: (newGouged) { setState(() => _gougedStocks.add(newGouged)); _saveData(); }),
+            onPressed: () => StockDialogs.showProcessSplitToGougedDialog(
+              context: context,
+              split: item,
+              getNextCode: _getNextCode,
+              onProcessed: (newGouged) {
+                setState(() => _gougedStocks.add(newGouged));
+                _saveData();
+                _tabController.animateTo(2); // ★ カマボコタブへ自動移動
+              },
+            ),
           ),
         );
       },
@@ -1688,7 +1723,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
             icon: const Icon(Icons.content_cut, size: 16),
             label: const Text('舟形(S)へ加工'),
-            onPressed: () => StockDialogs.showProcessGougedToShapedDialog(context: context, gouged: item, getNextCode: _getNextCode, onProcessed: (newShaped) { setState(() => _shapedStocks.add(newShaped)); _saveData(); }),
+            onPressed: () => StockDialogs.showProcessGougedToShapedDialog(
+              context: context,
+              gouged: item,
+              getNextCode: _getNextCode,
+              onProcessed: (newShaped) {
+                setState(() => _shapedStocks.add(newShaped));
+                _saveData();
+                _tabController.animateTo(3); // ★ 舟形タブへ自動移動
+              },
+            ),
           ),
         );
       },
@@ -1717,10 +1761,20 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             label: const Text('チューブを選んで糸巻き'),
             onPressed: () {
               final availableStaples = stapleStocks.where((s) => s.status == StapleStatus.unused).toList();
-              StockDialogs.showProcessShapedToTiedDialog(context: context, shaped: item, availableStaples: availableStaples, onProcessed: (newTied, selectedStaple) {
-                setState(() { _tiedStocks.add(newTied); item.remainingCount--; selectedStaple.status = StapleStatus.tied; });
-                _saveData();
-              });
+              StockDialogs.showProcessShapedToTiedDialog(
+                context: context,
+                shaped: item,
+                availableStaples: availableStaples,
+                onProcessed: (newTied, selectedStaple) {
+                  setState(() {
+                    _tiedStocks.add(newTied);
+                    item.remainingCount--;
+                    selectedStaple.status = StapleStatus.tied;
+                  });
+                  _saveData();
+                  _tabController.animateTo(5); // ★ 糸巻きタブへ自動移動
+                },
+              );
             },
           ),
         );
@@ -1779,6 +1833,12 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       itemBuilder: (context, i) {
         final item = _tiedStocks[i];
         final bool isWorking = _workingReedIds.contains(item.id);
+
+        final staple = stapleStocks.firstWhere(
+          (s) => s.id == item.stapleId,
+          orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+        );
+
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
           child: Padding(
@@ -1789,7 +1849,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(item.stapleId, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
+                    Text('[${staple.displayTitle}]', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

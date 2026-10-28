@@ -1,5 +1,5 @@
 // ==========================================
-// データモデル定義
+// データモデル定義 (UUID・堅牢なリレーション対応版)
 // ==========================================
 
 class TubeStock {
@@ -227,7 +227,7 @@ extension StapleStatusExtension on StapleStatus {
 }
 
 class StapleStock {
-  final String id;
+  final String id;      // ★ 不変の主キー（UUIDなど）
   String brand;         // メーカー (例: Chiarugi, Rigotti, Loree)
   String model;         // モデル (例: 2, 46, D12)
   String length;        // 全長数値 (例: 46, 47)
@@ -247,9 +247,10 @@ class StapleStock {
     this.memo,
   });
 
-  String get stapleId => '$brand$model$length$mark';
+  // 従来の文字列結合による表示用コード（後からマーク等を変更しても、idは変わらないため安全）
+  String get stapleCode => '$brand$model$length$mark';
 
-  String get displayTitle => '[$stapleId] $brand$model ($length -$mark)';
+  String get displayTitle => '[$stapleCode] $brand$model ($length -$mark)';
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -279,7 +280,7 @@ class StapleStock {
 // ==========================================
 class TiedStock {
   final String id;
-  final String stapleId;
+  final String stapleId; // ★ StapleStock の 'id' (UUID) を保持
   final String shapedCode;
   final String shapedTitle;
   final String tiedDate;
@@ -373,7 +374,7 @@ class ScrapeLog {
 // ==========================================
 class WorkReed {
   final String id;
-  String stapleId;
+  String stapleId;           // ★ StapleStock の 'id' (UUID) を保持
   String shapedCode;
   String shapedTitle;
   final String tiedDate;

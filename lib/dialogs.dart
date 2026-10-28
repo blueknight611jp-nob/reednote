@@ -150,7 +150,7 @@ class StockDialogs {
           ElevatedButton(
             onPressed: () {
               onRegistered(TubeStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: codeCtrl.text,
                 brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
                 purchasePeriod: periodCtrl.text.isEmpty ? '202506' : periodCtrl.text,
@@ -231,7 +231,7 @@ class StockDialogs {
           ElevatedButton(
             onPressed: () {
               onRegistered(SplitCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: codeCtrl.text,
                 sourceInfo: sourceCtrl.text,
                 brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
@@ -261,7 +261,7 @@ class StockDialogs {
     final periodCtrl = TextEditingController(text: selectedPeriod);
     final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'G'));
     final thickCtrl = TextEditingController(text: '0.58');
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm'); // ★太さを追加
+    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
     final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
     final countCtrl = TextEditingController(text: '5');
     final memoCtrl = TextEditingController();
@@ -300,7 +300,7 @@ class StockDialogs {
                 },
               ),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★太さ入力欄を追加
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
               TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
@@ -316,12 +316,12 @@ class StockDialogs {
               final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
               final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
               onRegistered(GougedCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: codeCtrl.text,
                 sourceTitle: '$b ($p)',
                 machine: 'Michel',
                 targetThickness: thickCtrl.text,
-                diameter: diameterCtrl.text, // ★
+                diameter: diameterCtrl.text,
                 gougingDate: dateCtrl.text,
                 memo: memoCtrl.text,
                 remainingCount: int.tryParse(countCtrl.text) ?? 0,
@@ -347,7 +347,7 @@ class StockDialogs {
     final periodCtrl = TextEditingController(text: selectedPeriod);
     final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'S'));
     final shaperCtrl = TextEditingController(text: 'H39');
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm'); // ★太さを追加
+    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
     final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
     final countCtrl = TextEditingController(text: '5');
     final memoCtrl = TextEditingController();
@@ -386,7 +386,7 @@ class StockDialogs {
                 },
               ),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★太さ入力欄を追加
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
               TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
@@ -402,11 +402,11 @@ class StockDialogs {
               final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
               final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
               onRegistered(ShapedCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: codeCtrl.text,
                 sourceTitle: '$b ($p)',
                 shaper: shaperCtrl.text,
-                diameter: diameterCtrl.text, // ★
+                diameter: diameterCtrl.text,
                 shapingDate: dateCtrl.text,
                 memo: memoCtrl.text,
                 remainingCount: int.tryParse(countCtrl.text) ?? 0,
@@ -546,7 +546,7 @@ class StockDialogs {
     final codeCtrl = TextEditingController(text: gouged.code);
     final titleCtrl = TextEditingController(text: gouged.sourceTitle);
     final thickCtrl = TextEditingController(text: gouged.targetThickness);
-    final diameterCtrl = TextEditingController(text: gouged.diameter); // ★太さを編集
+    final diameterCtrl = TextEditingController(text: gouged.diameter);
     final dateCtrl = TextEditingController(text: gouged.gougingDate);
     final memoCtrl = TextEditingController(text: gouged.memo ?? '');
 
@@ -560,7 +560,7 @@ class StockDialogs {
             children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材名')),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
@@ -575,7 +575,7 @@ class StockDialogs {
               gouged.code = codeCtrl.text;
               gouged.sourceTitle = titleCtrl.text;
               gouged.targetThickness = thickCtrl.text;
-              gouged.diameter = diameterCtrl.text; // ★
+              gouged.diameter = diameterCtrl.text;
               gouged.gougingDate = dateCtrl.text;
               gouged.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
               onSaved();
@@ -596,7 +596,7 @@ class StockDialogs {
     final codeCtrl = TextEditingController(text: shaped.code);
     final titleCtrl = TextEditingController(text: shaped.sourceTitle);
     final shaperCtrl = TextEditingController(text: shaped.shaper);
-    final diameterCtrl = TextEditingController(text: shaped.diameter); // ★太さを編集
+    final diameterCtrl = TextEditingController(text: shaped.diameter);
     final dateCtrl = TextEditingController(text: shaped.shapingDate);
     final memoCtrl = TextEditingController(text: shaped.memo ?? '');
 
@@ -610,7 +610,7 @@ class StockDialogs {
             children: [
               TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材/情報')),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
@@ -625,7 +625,7 @@ class StockDialogs {
               shaped.code = codeCtrl.text;
               shaped.sourceTitle = titleCtrl.text;
               shaped.shaper = shaperCtrl.text;
-              shaped.diameter = diameterCtrl.text; // ★
+              shaped.diameter = diameterCtrl.text;
               shaped.shapingDate = dateCtrl.text;
               shaped.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
               onSaved();
@@ -639,7 +639,7 @@ class StockDialogs {
   }
 
   // ==========================================
-  // 加工移動ダイアログ群 (元の太さを自動引き継ぎ)
+  // 加工移動ダイアログ群
   // ==========================================
 
   static void showProcessTubeToSplitDialog({
@@ -686,13 +686,13 @@ class StockDialogs {
 
               tube.remainingCount -= useCount;
               onProcessed(SplitCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: newCodeCtrl.text,
                 sourceInfo: '${tube.code} から${useCount}本使用',
                 brand: tube.brand,
                 purchasePeriod: tube.purchasePeriod,
                 vendor: tube.vendor,
-                diameter: tube.diameter, // ★ 太さを引き継ぎ
+                diameter: tube.diameter,
                 memo: memoCtrl.text,
                 remainingCount: yieldCount,
               ));
@@ -714,7 +714,7 @@ class StockDialogs {
   }) {
     final useCountCtrl = TextEditingController(text: '5');
     final thickCtrl = TextEditingController(text: '0.58');
-    final diameterCtrl = TextEditingController(text: split.diameter); // ★半カマボコの太さを引き継ぎ
+    final diameterCtrl = TextEditingController(text: split.diameter);
     final newCodeCtrl = TextEditingController(text: getNextCode(split.brand, split.purchasePeriod, 'G'));
     final memoCtrl = TextEditingController(text: 'Michelマシン');
 
@@ -728,7 +728,7 @@ class StockDialogs {
             children: [
               TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '加工する枚数')),
               TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ (mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
               TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成するカマボコの識別マーク')),
@@ -744,12 +744,12 @@ class StockDialogs {
 
               split.remainingCount -= useCount;
               onProcessed(GougedCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: newCodeCtrl.text,
                 sourceTitle: '${split.brand} (${split.purchasePeriod})',
                 machine: 'Michel',
                 targetThickness: thickCtrl.text,
-                diameter: diameterCtrl.text, // ★
+                diameter: diameterCtrl.text,
                 gougingDate: DateTime.now().toLocal().toString().split(' ')[0],
                 memo: memoCtrl.text,
                 remainingCount: useCount,
@@ -772,7 +772,7 @@ class StockDialogs {
   }) {
     final useCountCtrl = TextEditingController(text: '5');
     final shaperCtrl = TextEditingController(text: 'H39');
-    final diameterCtrl = TextEditingController(text: gouged.diameter); // ★カマボコの太さを引き継ぎ
+    final diameterCtrl = TextEditingController(text: gouged.diameter);
     
     String brand = 'Rigotti';
     String period = '202506';
@@ -796,7 +796,7 @@ class StockDialogs {
             children: [
               TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'シェイプする枚数')),
               TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')), // ★
+              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
               TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
               const SizedBox(height: 8),
               TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成する舟形の識別マーク')),
@@ -812,11 +812,11 @@ class StockDialogs {
 
               gouged.remainingCount -= useCount;
               onProcessed(ShapedCaneStock(
-                id: DateTime.now().toString(),
+                id: DateTime.now().microsecondsSinceEpoch.toString(),
                 code: newCodeCtrl.text,
                 sourceTitle: '${gouged.sourceTitle}${gouged.targetThickness}mm',
                 shaper: shaperCtrl.text,
-                diameter: diameterCtrl.text, // ★
+                diameter: diameterCtrl.text,
                 shapingDate: DateTime.now().toLocal().toString().split(' ')[0],
                 memo: memoCtrl.text,
                 remainingCount: useCount,
@@ -934,7 +934,7 @@ class StockDialogs {
                     ),
                   ],
                   const SizedBox(height: 8),
-                  Text('ID生成プレビュー: $previewId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  Text('プレビュー: $previewId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                   TextField(
                     controller: memoCtrl,
                     decoration: const InputDecoration(labelText: 'メモ'),
@@ -957,7 +957,8 @@ class StockDialogs {
 
                     for (int i = 0; i < marks.length; i++) {
                       generatedList.add(StapleStock(
-                        id: '${now.millisecondsSinceEpoch}_$i',
+                        // ★ 一意な主キー（id）を付与
+                        id: '${now.microsecondsSinceEpoch}_$i',
                         brand: brandToUse,
                         model: modelCtrl.text,
                         length: lengthCtrl.text,
@@ -968,7 +969,7 @@ class StockDialogs {
                     }
                   } else {
                     generatedList.add(StapleStock(
-                      id: now.toString(),
+                      id: now.microsecondsSinceEpoch.toString(),
                       brand: brandToUse,
                       model: modelCtrl.text,
                       length: lengthCtrl.text,
@@ -1128,7 +1129,6 @@ class StockDialogs {
     final lengthController = TextEditingController(text: '73.0');
     final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
     
-    // ★ 糸の種類と色の選択肢
     final List<String> threadTypes = ['ナイロン', 'ポリエステル', '絹'];
     final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
     
@@ -1180,7 +1180,6 @@ class StockDialogs {
                       decoration: const InputDecoration(labelText: '糸巻き日 (YYYY-MM-DD)'),
                     ),
                     const SizedBox(height: 12),
-                    // ★ 糸の種類と色の選択プルダウン
                     Row(
                       children: [
                         Expanded(
@@ -1219,12 +1218,12 @@ class StockDialogs {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    // ★ 「ナイロン赤」のように結合して保存
                     final combinedThreadColor = '$selectedType$selectedColor';
 
                     final newTied = TiedStock(
-                      id: DateTime.now().millisecondsSinceEpoch.toString(),
-                      stapleId: selectedStaple.stapleId,
+                      id: DateTime.now().microsecondsSinceEpoch.toString(),
+                      // ★ ここが文字列の stapleId ではなく、マスターの不変 ID (UUID) を保持するよう変更
+                      stapleId: selectedStaple.id, 
                       shapedCode: shaped.code,
                       shapedTitle: shaped.displayTitle,
                       tiedDate: dateController.text,
@@ -1245,5 +1244,4 @@ class StockDialogs {
       },
     );
   }
-
 }
