@@ -1,240 +1,234 @@
-// ==========================================
-// データモデル定義 (UUID・堅牢なリレーション対応版)
-// ==========================================
+import 'dart:convert';
 
+// 1. 丸材ストックモデル
 class TubeStock {
-  final String id;
-  String code; // 識別マーク (例: T01-Gon2506)
+  String id;
   String brand;
-  String purchasePeriod; // YYYYMM (例: 202506)
-  String? vendor;
+  String purchasePeriod;
   String diameter;
-  String? memo;
+  String? vendor;
   int remainingCount;
+  String? memo;
 
   TubeStock({
     required this.id,
-    required this.code,
     required this.brand,
     required this.purchasePeriod,
-    this.vendor,
     required this.diameter,
-    required this.memo,
+    this.vendor,
     required this.remainingCount,
+    this.memo,
   });
 
-  String get displayTitle => '[$code] $brand ($purchasePeriod) 丸材';
+  String get code => id;
+  String get displayTitle => '$brand$purchasePeriod(T)';
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'code': code,
-        'brand': brand,
-        'purchasePeriod': purchasePeriod,
-        'vendor': vendor,
-        'diameter': diameter,
-        'memo': memo,
-        'remainingCount': remainingCount,
-      };
+    'id': id,
+    'brand': brand,
+    'purchasePeriod': purchasePeriod,
+    'diameter': diameter,
+    'vendor': vendor,
+    'remainingCount': remainingCount,
+    'memo': memo,
+  };
 
   factory TubeStock.fromJson(Map<String, dynamic> json) => TubeStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        code: json['code'] ?? 'T01-Can2501',
-        brand: json['brand'] ?? '',
-        purchasePeriod: json['purchasePeriod'] ?? '202506',
-        vendor: json['vendor'],
-        diameter: json['diameter'] ?? '',
-        memo: json['memo'],
-        remainingCount: json['remainingCount'] ?? 0,
-      );
+    id: json['id'] ?? '',
+    brand: json['brand'] ?? '',
+    purchasePeriod: json['purchasePeriod'] ?? '',
+    diameter: json['diameter'] ?? '',
+    vendor: json['vendor'],
+    remainingCount: json['remainingCount'] ?? 0,
+    memo: json['memo'],
+  );
 }
 
+// 2. 半カマボコケーンストックモデル
 class SplitCaneStock {
-  final String id;
-  String code; // 識別マーク (例: P01-Gon2506)
-  String sourceInfo;
+  String id;
+  String code;
   String brand;
   String purchasePeriod;
-  String? vendor;
   String diameter;
-  String? memo;
+  String sourceInfo;
   int remainingCount;
+  String? memo;
 
   SplitCaneStock({
     required this.id,
-    required this.code,
-    required this.sourceInfo,
     required this.brand,
     required this.purchasePeriod,
-    this.vendor,
     required this.diameter,
-    required this.memo,
+    required this.sourceInfo,
     required this.remainingCount,
-  });
+    this.memo,
+  }) : code = id;
 
-  String get displayTitle => '[$code] $brand ($purchasePeriod) 半カマボコ';
+  String get displayTitle {
+    String originTag = id.contains('-T') ? 'T' : 'P';
+    return '$brand$purchasePeriod$originTag';
+  }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'code': code,
-        'sourceInfo': sourceInfo,
-        'brand': brand,
-        'purchasePeriod': purchasePeriod,
-        'vendor': vendor,
-        'diameter': diameter,
-        'memo': memo,
-        'remainingCount': remainingCount,
-      };
+    'id': id,
+    'brand': brand,
+    'purchasePeriod': purchasePeriod,
+    'diameter': diameter,
+    'sourceInfo': sourceInfo,
+    'remainingCount': remainingCount,
+    'memo': memo,
+  };
 
   factory SplitCaneStock.fromJson(Map<String, dynamic> json) => SplitCaneStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        code: json['code'] ?? 'P01-Can2501',
-        sourceInfo: json['sourceInfo'] ?? '手動登録',
-        brand: json['brand'] ?? '',
-        purchasePeriod: json['purchasePeriod'] ?? '202506',
-        vendor: json['vendor'],
-        diameter: json['diameter'] ?? '10〜10.5mm',
-        memo: json['memo'],
-        remainingCount: json['remainingCount'] ?? 0,
-      );
+    id: json['id'] ?? '',
+    brand: json['brand'] ?? '',
+    purchasePeriod: json['purchasePeriod'] ?? '',
+    diameter: json['diameter'] ?? '',
+    sourceInfo: json['sourceInfo'] ?? '',
+    remainingCount: json['remainingCount'] ?? 0,
+    memo: json['memo'],
+  );
 }
 
+// 3. カマボコケーンストックモデル
 class GougedCaneStock {
-  final String id;
-  String code; // 識別マーク (例: G01-Gon2506)
-  String sourceTitle;
-  String machine;
-  String targetThickness;
+  String id;
+  String code;
+  String brand;
+  String purchasePeriod;
   String diameter;
+  String machine;
+  double? thickness;
   String gougingDate;
-  String? memo;
   int remainingCount;
+  String? memo;
+  String sourceTitle;
 
   GougedCaneStock({
     required this.id,
-    required this.code,
-    required this.sourceTitle,
-    required this.machine,
-    required this.targetThickness,
+    required this.brand,
+    required this.purchasePeriod,
     required this.diameter,
+    required this.machine,
+    this.thickness,
     required this.gougingDate,
-    required this.memo,
     required this.remainingCount,
-  });
+    this.memo,
+    this.sourceTitle = '',
+  }) : code = id;
 
-  String get displayTitle => '[$code] $sourceTitle (G$targetThickness mm)';
+  String get displayTitle {
+    String originTag = id.contains('-T') ? 'T' : (id.contains('-P') ? 'P' : 'G');
+    String thickStr = thickness != null ? '-$thickness' : '';
+    return '$brand$purchasePeriod$originTag$thickStr';
+  }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'code': code,
-        'sourceTitle': sourceTitle,
-        'machine': machine,
-        'targetThickness': targetThickness,
-        'diameter': diameter,
-        'gougingDate': gougingDate,
-        'memo': memo,
-        'remainingCount': remainingCount,
-      };
+    'id': id,
+    'brand': brand,
+    'purchasePeriod': purchasePeriod,
+    'diameter': diameter,
+    'machine': machine,
+    'thickness': thickness,
+    'gougingDate': gougingDate,
+    'remainingCount': remainingCount,
+    'memo': memo,
+    'sourceTitle': sourceTitle,
+  };
 
   factory GougedCaneStock.fromJson(Map<String, dynamic> json) => GougedCaneStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        code: json['code'] ?? 'G01-Can2501',
-        sourceTitle: json['sourceTitle'] ?? '',
-        machine: json['machine'] ?? 'Michel',
-        targetThickness: json['targetThickness'] ?? '0.58',
-        diameter: json['diameter'] ?? '10〜10.5mm',
-        gougingDate: json['gougingDate'] ?? '',
-        memo: json['memo'],
-        remainingCount: json['remainingCount'] ?? 0,
-      );
+    id: json['id'] ?? '',
+    brand: json['brand'] ?? '',
+    purchasePeriod: json['purchasePeriod'] ?? '',
+    diameter: json['diameter'] ?? '',
+    machine: json['machine'] ?? '',
+    thickness: json['thickness'] != null ? (json['thickness'] as num).toDouble() : null,
+    gougingDate: json['gougingDate'] ?? '',
+    remainingCount: json['remainingCount'] ?? 0,
+    memo: json['memo'],
+    sourceTitle: json['sourceTitle'] ?? '',
+  );
 }
 
+// 4. 舟形ケーンストックモデル
 class ShapedCaneStock {
-  final String id;
-  String code; // 識別マーク (例: S01-Gon2506)
-  String sourceTitle;
-  String shaper;
+  String id;
+  String code;
+  String brand;
+  String purchasePeriod;
   String diameter;
+  String shaper;
+  double? thickness;
   String shapingDate;
-  String? memo;
   int remainingCount;
+  String? memo;
 
   ShapedCaneStock({
     required this.id,
-    required this.code,
-    required this.sourceTitle,
-    required this.shaper,
+    required this.brand,
+    required this.purchasePeriod,
     required this.diameter,
+    required this.shaper,
+    this.thickness,
     required this.shapingDate,
-    required this.memo,
     required this.remainingCount,
-  });
+    this.memo,
+  }) : code = id;
 
-  String get displayTitle => '[$code] $shaper -$sourceTitle (舟形)';
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'code': code,
-        'sourceTitle': sourceTitle,
-        'shaper': shaper,
-        'diameter': diameter,
-        'shapingDate': shapingDate,
-        'memo': memo,
-        'remainingCount': remainingCount,
-      };
-
-  factory ShapedCaneStock.fromJson(Map<String, dynamic> json) => ShapedCaneStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        code: json['code'] ?? 'S01-Can2501',
-        sourceTitle: json['sourceTitle'] ?? '',
-        shaper: json['shaper'] ?? 'H39',
-        diameter: json['diameter'] ?? '10〜10.5mm',
-        shapingDate: json['shapingDate'] ?? '',
-        memo: json['memo'],
-        remainingCount: json['remainingCount'] ?? 0,
-      );
-}
-
-// ==========================================
-// チューブ (Staple) 個体管理モデル
-// ==========================================
-
-enum StapleStatus {
-  unused,    // 未使用
-  tied,      // 糸巻き済み
-  discarded, // 廃棄・破損
-}
-
-extension StapleStatusExtension on StapleStatus {
-  String get label {
-    switch (this) {
-      case StapleStatus.unused:
-        return '未使用';
-      case StapleStatus.tied:
-        return '糸巻き済み';
-      case StapleStatus.discarded:
-        return '廃棄・破損';
-    }
+  String get displayTitle {
+    String originTag = id.contains('-T') ? 'T' : (id.contains('-P') ? 'P' : (id.contains('-G') ? 'G' : 'S'));
+    String thickStr = thickness != null ? '-$thickness' : '';
+    String shaperStr = shaper.isNotEmpty ? '-$shaper' : '';
+    return '$brand$purchasePeriod$originTag$thickStr$shaperStr';
   }
 
-  String toCode() => name;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'brand': brand,
+    'purchasePeriod': purchasePeriod,
+    'diameter': diameter,
+    'shaper': shaper,
+    'thickness': thickness,
+    'shapingDate': shapingDate,
+    'remainingCount': remainingCount,
+    'memo': memo,
+  };
 
-  static StapleStatus fromCode(String code) {
-    return StapleStatus.values.firstWhere(
-      (e) => e.name == code,
-      orElse: () => StapleStatus.unused,
-    );
+  factory ShapedCaneStock.fromJson(Map<String, dynamic> json) => ShapedCaneStock(
+    id: json['id'] ?? '',
+    brand: json['brand'] ?? '',
+    purchasePeriod: json['purchasePeriod'] ?? '',
+    diameter: json['diameter'] ?? '',
+    shaper: json['shaper'] ?? '',
+    thickness: json['thickness'] != null ? (json['thickness'] as num).toDouble() : null,
+    shapingDate: json['shapingDate'] ?? '',
+    remainingCount: json['remainingCount'] ?? 0,
+    memo: json['memo'],
+  );
+}
+
+// 5. チューブ (Staple) モデル
+enum StapleStatus { unused, tied, used }
+extension StapleStatusExt on StapleStatus {
+  String get label {
+    switch (this) {
+      case StapleStatus.unused: return '未使用';
+      case StapleStatus.tied: return '糸巻き済';
+      case StapleStatus.used: return '使用済み';
+    }
   }
 }
 
 class StapleStock {
-  final String id;      // ★ 不変の主キー（UUIDなど）
-  String brand;         // メーカー (例: Chiarugi, Rigotti, Loree)
-  String model;         // モデル (例: 2, 46, D12)
-  String length;        // 全長数値 (例: 46, 47)
-  String mark;          // 個体マーク (例: a, b, c ... z, ah)
-  String material;      // 材質 (デフォルト: Brass)
-  StapleStatus status;  // ステータス (未使用 / 糸巻き済み / 廃棄)
-  String? memo;         // 備考・メモ
+  String id;
+  String brand;
+  String model;
+  String length;
+  String mark;
+  String material;
+  StapleStatus status;
+  String? memo;
 
   StapleStock({
     required this.id,
@@ -242,49 +236,44 @@ class StapleStock {
     required this.model,
     required this.length,
     required this.mark,
-    this.material = 'Brass',
+    this.material = 'ブラス',
     this.status = StapleStatus.unused,
     this.memo,
   });
 
-  // 従来の文字列結合による表示用コード（後からマーク等を変更しても、idは変わらないため安全）
-  String get stapleCode => '$brand$model$length$mark';
-
-  String get displayTitle => '[$stapleCode] $brand$model ($length -$mark)';
+  String get displayTitle => '$brand $model $length';
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'brand': brand,
-        'model': model,
-        'length': length,
-        'mark': mark,
-        'material': material,
-        'status': status.toCode(),
-        'memo': memo,
-      };
+    'id': id,
+    'brand': brand,
+    'model': model,
+    'length': length,
+    'mark': mark,
+    'material': material,
+    'status': status.index,
+    'memo': memo,
+  };
 
   factory StapleStock.fromJson(Map<String, dynamic> json) => StapleStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        brand: json['brand'] ?? 'Chiarugi',
-        model: json['model'] ?? '2',
-        length: json['length'] ?? '46',
-        mark: json['mark'] ?? 'a',
-        material: json['material'] ?? 'Brass',
-        status: StapleStatusExtension.fromCode(json['status'] ?? 'unused'),
-        memo: json['memo'],
-      );
+    id: json['id'] ?? '',
+    brand: json['brand'] ?? '',
+    model: json['model'] ?? '',
+    length: json['length'] ?? '',
+    mark: json['mark'] ?? '',
+    material: json['material'] ?? 'ブラス',
+    status: StapleStatus.values[json['status'] ?? 0],
+    memo: json['memo'],
+  );
 }
 
-// ==========================================
-// 糸巻き済み (Tied) モデル
-// ==========================================
+// 6. 糸巻き (Tied) モデル
 class TiedStock {
-  final String id;
-  final String stapleId; // ★ StapleStock の 'id' (UUID) を保持
-  final String shapedCode;
-  final String shapedTitle;
-  final String tiedDate;
-  String totalLength;
+  String id;
+  String stapleId;
+  String shapedCode;
+  String shapedTitle;
+  String tiedDate;
+  double totalLength;
   String? threadColor;
   String? memo;
 
@@ -300,89 +289,40 @@ class TiedStock {
   });
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'stapleId': stapleId,
-        'shapedCode': shapedCode,
-        'shapedTitle': shapedTitle,
-        'tiedDate': tiedDate,
-        'totalLength': totalLength,
-        'threadColor': threadColor,
-        'memo': memo,
-      };
+    'id': id,
+    'stapleId': stapleId,
+    'shapedCode': shapedCode,
+    'shapedTitle': shapedTitle,
+    'tiedDate': tiedDate,
+    'totalLength': totalLength,
+    'threadColor': threadColor,
+    'memo': memo,
+  };
 
   factory TiedStock.fromJson(Map<String, dynamic> json) => TiedStock(
-        id: json['id'] ?? DateTime.now().toString(),
-        stapleId: json['stapleId'] ?? '',
-        shapedCode: json['shapedCode'] ?? '',
-        shapedTitle: json['shapedTitle'] ?? '',
-        tiedDate: json['tiedDate'] ?? DateTime.now().toString().split(' ')[0],
-        totalLength: json['totalLength'] ?? '73.0',
-        threadColor: json['threadColor'],
-        memo: json['memo'],
-      );
+    id: json['id'] ?? '',
+    stapleId: json['stapleId'] ?? '',
+    shapedCode: json['shapedCode'] ?? '',
+    shapedTitle: json['shapedTitle'] ?? json['shapedCode'] ?? '',
+    tiedDate: json['tiedDate'] ?? '',
+    totalLength: (json['totalLength'] as num?)?.toDouble() ?? 73.0,
+    threadColor: json['threadColor'],
+    memo: json['memo'],
+  );
 }
 
-// ==========================================
-// 日々の削り・試奏ログモデル
-// ==========================================
-class ScrapeLog {
-  final String id;
-  String date;                // 記録日 (YYYY-MM-DD)
-  int? level;                 // コンディションレベル (1〜5)
-  String? totalLength;        // その時点の全長 (例: 71.5mm)
-  String? scrapeLength;       // スクレープ長 (例: 10.5mm)
-  String? pitchRating;        // ピッチ/音程評価
-  String? resistanceRating;   // 抵抗感
-  String? memo;               // メモ
-
-  ScrapeLog({
-    required this.id,
-    required this.date,
-    this.level,
-    this.totalLength,
-    this.scrapeLength,
-    this.pitchRating,
-    this.resistanceRating,
-    this.memo,
-  });
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'date': date,
-        'level': level,
-        'totalLength': totalLength,
-        'scrapeLength': scrapeLength,
-        'pitchRating': pitchRating,
-        'resistanceRating': resistanceRating,
-        'memo': memo,
-      };
-
-  factory ScrapeLog.fromJson(Map<String, dynamic> json) => ScrapeLog(
-        id: json['id'] ?? DateTime.now().toString(),
-        date: json['date'] ?? DateTime.now().toString().split(' ')[0],
-        level: json['level'],
-        totalLength: json['totalLength'],
-        scrapeLength: json['scrapeLength'],
-        pitchRating: json['pitchRating'],
-        resistanceRating: json['resistanceRating'],
-        memo: json['memo'],
-      );
-}
-
-// ==========================================
-// 調整中・完成リードモデル (WorkReedに統一)
-// ==========================================
+// 7. リード調整作業用モデル (ページ1用)
 class WorkReed {
-  final String id;
-  String stapleId;           // ★ StapleStock の 'id' (UUID) を保持
+  String id;
+  String stapleId;
   String shapedCode;
   String shapedTitle;
-  final String tiedDate;
-  String currentTotalLength; // 現在の全長
-  int qualityLevel;          // コンディションレベル (0〜5)
-  String? threadColor;       // 糸情報 (例: ナイロン赤)
-  List<String> photosBase64; // 写真複数枚
-  List<ScrapeLog> logs;      // 履歴リスト
+  String tiedDate;
+  String currentTotalLength; // adjustment_work_page.dart に合わせて String に統一
+  int qualityLevel;
+  String? threadColor;
+  List<String> photosBase64;
+  List<WorkLog> logs;
 
   WorkReed({
     required this.id,
@@ -390,47 +330,82 @@ class WorkReed {
     required this.shapedCode,
     required this.shapedTitle,
     required this.tiedDate,
-    required this.currentTotalLength,
-    this.qualityLevel = 1,
+    required dynamic currentTotalLength, // doubleでもStringでも安全に受け取ってStringにする
+    required this.qualityLevel,
     this.threadColor,
     List<String>? photosBase64,
     required this.logs,
-  }) : photosBase64 = photosBase64 ?? [];
+  }) : this.currentTotalLength = currentTotalLength.toString(),
+       this.photosBase64 = photosBase64 ?? [];
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'stapleId': stapleId,
-        'shapedCode': shapedCode,
-        'shapedTitle': shapedTitle,
-        'tiedDate': tiedDate,
-        'currentTotalLength': currentTotalLength,
-        'qualityLevel': qualityLevel,
-        'threadColor': threadColor,
-        'photosBase64': photosBase64,
-        'logs': logs.map((e) => e.toJson()).toList(),
-      };
+    'id': id,
+    'stapleId': stapleId,
+    'shapedCode': shapedCode,
+    'shapedTitle': shapedTitle,
+    'tiedDate': tiedDate,
+    'currentTotalLength': currentTotalLength,
+    'qualityLevel': qualityLevel,
+    'threadColor': threadColor,
+    'photosBase64': photosBase64,
+    'logs': logs.map((e) => e.toJson()).toList(),
+  };
 
-  factory WorkReed.fromJson(Map<String, dynamic> json) {
-    List<String> loadedPhotos = [];
-    if (json['photosBase64'] != null) {
-      loadedPhotos = List<String>.from(json['photosBase64']);
-    } else if (json['photoBase64'] != null && (json['photoBase64'] as String).isNotEmpty) {
-      loadedPhotos.add(json['photoBase64']);
-    }
+  factory WorkReed.fromJson(Map<String, dynamic> json) => WorkReed(
+    id: json['id'] ?? '',
+    stapleId: json['stapleId'] ?? '',
+    shapedCode: json['shapedCode'] ?? '',
+    shapedTitle: json['shapedTitle'] ?? json['shapedCode'] ?? '',
+    tiedDate: json['tiedDate'] ?? '',
+    currentTotalLength: json['currentTotalLength']?.toString() ?? '71.0',
+    qualityLevel: json['qualityLevel'] ?? 1,
+    threadColor: json['threadColor'],
+    photosBase64: (json['photosBase64'] as List?)?.map((e) => e.toString()).toList() ?? [],
+    logs: (json['logs'] as List?)?.map((e) => WorkLog.fromJson(e)).toList() ?? [],
+  );
+}
 
-    return WorkReed(
-      id: json['id'] ?? DateTime.now().toString(),
-      stapleId: json['stapleId'] ?? '',
-      shapedCode: json['shapedCode'] ?? '',
-      shapedTitle: json['shapedTitle'] ?? '',
-      tiedDate: json['tiedDate'] ?? '',
-      currentTotalLength: json['currentTotalLength'] ?? '71.0',
-      qualityLevel: json['qualityLevel'] ?? 1,
-      threadColor: json['threadColor'],
-      photosBase64: loadedPhotos,
-      logs: (json['logs'] as List? ?? [])
-          .map((e) => ScrapeLog.fromJson(e))
-          .toList(),
-    );
-  }
+// 8. 調整ログモデル (ScrapeLog 兼 WorkLog)
+typedef ScrapeLog = WorkLog;
+
+class WorkLog {
+  String id;
+  String date;
+  int level;
+  String totalLength; // adjustment_work_page.dart に合わせて String に統一
+  String? resistanceRating;
+  String? pitchRating;
+  String memo;
+
+  WorkLog({
+    String? id,
+    required this.date,
+    required this.level,
+    dynamic totalLength,
+    dynamic length,
+    this.resistanceRating,
+    this.pitchRating,
+    required this.memo,
+  }) : this.id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+       this.totalLength = (totalLength ?? length ?? '0.0').toString();
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'date': date,
+    'level': level,
+    'totalLength': totalLength,
+    'resistanceRating': resistanceRating,
+    'pitchRating': pitchRating,
+    'memo': memo,
+  };
+
+  factory WorkLog.fromJson(Map<String, dynamic> json) => WorkLog(
+    id: json['id'],
+    date: json['date'] ?? '',
+    level: json['level'] ?? 1,
+    totalLength: json['totalLength']?.toString() ?? json['length']?.toString() ?? '0.0',
+    resistanceRating: json['resistanceRating'],
+    pitchRating: json['pitchRating'],
+    memo: json['memo'] ?? '',
+  );
 }

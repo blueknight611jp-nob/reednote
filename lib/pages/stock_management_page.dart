@@ -31,13 +31,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
     list.sort((a, b) {
-      int c = a.brand.compareTo(b.brand);
+      int c = b.brand.compareTo(a.brand); // ブランド降順（必要に応じて調整）
       if (c != 0) return c;
-      c = a.model.compareTo(b.model);
+      c = b.model.compareTo(a.model);
       if (c != 0) return c;
-      c = a.length.compareTo(b.length);
+      c = b.length.compareTo(a.length);
       if (c != 0) return c;
-      return a.mark.compareTo(b.mark);
+      return b.mark.compareTo(a.mark);
     });
     return list;
   }
@@ -148,7 +148,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         shapedCode: tied.shapedCode,
         shapedTitle: tied.shapedTitle,
         tiedDate: tied.tiedDate,
-        currentTotalLength: tied.totalLength,
+        currentTotalLength: tied.totalLength.toString(),
         qualityLevel: 1,
         threadColor: tied.threadColor,
         logs: [],
@@ -176,9 +176,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   List<String> _getAllExistingPeriods() {
-    Set<String> periods = {'202506', '202601'};
-    for (var t in _tubeStocks) { if (t.purchasePeriod.isNotEmpty) periods.add(t.purchasePeriod); }
-    for (var s in _splitStocks) { if (s.purchasePeriod.isNotEmpty) periods.add(s.purchasePeriod); }
+    Set<String> periods = {'2506', '2601'};
+    for (var t in _tubeStocks) { if (t.purchasePeriod.isNotEmpty) periods.add(_formatYYMM(t.purchasePeriod)); }
+    for (var s in _splitStocks) { if (s.purchasePeriod.isNotEmpty) periods.add(_formatYYMM(s.purchasePeriod)); }
     return periods.toList();
   }
 
@@ -189,8 +189,11 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   String _formatYYMM(String period) {
     String digits = period.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.length >= 6) return digits.substring(2, 6);
-    if (digits.length == 4) return digits;
+    if (digits.length >= 6) {
+      return digits.substring(2, 6);
+    } else if (digits.length == 4) {
+      return digits;
+    }
     return '2501';
   }
 
@@ -297,7 +300,17 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
     switch (_tabController.index) {
       case 0:
-        StockDialogs.showAddTubeDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, existingVendors: existingVendors, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _tubeStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddTubeDialog(
+          context: context, 
+          existingBrands: existingBrands, 
+          existingPeriods: existingPeriods, 
+          existingVendors: existingVendors, 
+          getNextCode: _getNextCode, 
+          onRegistered: (newStock) { 
+            setState(() => _tubeStocks.insert(0, newStock)); // ← .add から insert(0) に変更してトップへ！
+            _saveData(); 
+          },
+        );
         break;
       case 1:
         StockDialogs.showAddSplitDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _splitStocks.add(newStock)); _saveData(); });
@@ -416,7 +429,10 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildTubeStockTab() {
-    final items = _showOnlyInStock ? _tubeStocks.where((e) => e.remainingCount > 0).toList() : _tubeStocks;
+    List<TubeStock> items = _showOnlyInStock ? _tubeStocks.where((e) => e.remainingCount > 0).toList() : List.from(_tubeStocks);
+    // コードの降順（新しいものが上）にソート
+    items.sort((a, b) => b.code.compareTo(a.code));
+
     if (items.isEmpty) return const Center(child: Text('表示する丸材ストックがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
@@ -440,9 +456,11 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
               tube: item,
               getNextCode: _getNextCode,
               onProcessed: (newSplit) {
-                setState(() => _splitStocks.add(newSplit));
+                setState(() {
+                  _splitStocks.insert(0, newSplit); // ← リストの先頭（Top）に強制的に挿入する
+                });
                 _saveData();
-                _tabController.animateTo(1); // 半カマボコタブへ自動移動
+                _tabController.animateTo(1);
               },
             ),
           ),
@@ -452,7 +470,10 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildSplitStockTab() {
-    final items = _showOnlyInStock ? _splitStocks.where((e) => e.remainingCount > 0).toList() : _splitStocks;
+    List<SplitCaneStock> items = _showOnlyInStock ? _splitStocks.where((e) => e.remainingCount > 0).toList() : List.from(_splitStocks);
+    // items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
+    items.sort((a, b) => b.id.compareTo(a.id));
+
     if (items.isEmpty) return const Center(child: Text('表示する半カマボコストックがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
@@ -478,7 +499,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
               onProcessed: (newGouged) {
                 setState(() => _gougedStocks.add(newGouged));
                 _saveData();
-                _tabController.animateTo(2); // カマボコタブへ自動移動
+                _tabController.animateTo(2);
               },
             ),
           ),
@@ -488,7 +509,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildGougedStockTab() {
-    final items = _showOnlyInStock ? _gougedStocks.where((e) => e.remainingCount > 0).toList() : _gougedStocks;
+    List<GougedCaneStock> items = _showOnlyInStock ? _gougedStocks.where((e) => e.remainingCount > 0).toList() : List.from(_gougedStocks);
+    items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
+
     if (items.isEmpty) return const Center(child: Text('表示するカマボコストックがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
@@ -514,7 +537,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
               onProcessed: (newShaped) {
                 setState(() => _shapedStocks.add(newShaped));
                 _saveData();
-                _tabController.animateTo(3); // 舟形タブへ自動移動
+                _tabController.animateTo(3);
               },
             ),
           ),
@@ -524,7 +547,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildShapedStockTab() {
-    final items = _showOnlyInStock ? _shapedStocks.where((e) => e.remainingCount > 0).toList() : _shapedStocks;
+    List<ShapedCaneStock> items = _showOnlyInStock ? _shapedStocks.where((e) => e.remainingCount > 0).toList() : List.from(_shapedStocks);
+    items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
+
     if (items.isEmpty) return const Center(child: Text('表示する舟形ストックがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
@@ -556,7 +581,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                     selectedStaple.status = StapleStatus.tied;
                   });
                   _saveData();
-                  _tabController.animateTo(5); // 糸巻きタブへ自動移動
+                  _tabController.animateTo(5);
                 },
               );
             },
@@ -610,12 +635,15 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildTiedStockTab() {
-    if (_tiedStocks.isEmpty) return const Center(child: Text('糸巻き(Tied)されたリードがありません'));
+    List<TiedStock> items = List.from(_tiedStocks);
+    items.sort((a, b) => b.id.compareTo(a.id)); // 新しいもの（IDが大きい順）を上に
+
+    if (items.isEmpty) return const Center(child: Text('糸巻き(Tied)されたリードがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: _tiedStocks.length,
+      itemCount: items.length,
       itemBuilder: (context, i) {
-        final item = _tiedStocks[i];
+        final item = items[i];
         final bool isWorking = _workingReedIds.contains(item.id);
 
         final staple = stapleStocks.firstWhere(

@@ -2,146 +2,108 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 
 class StockDialogs {
-  
-  // 共通のブランド入力用 Autocomplete ウィジェット
-  static Widget buildBrandAutocomplete({
+
+  // --- 共通ヘルパー: リストから出現頻度が高い順（よく使う順）に抽出する ---
+  static List<String> _getFrequentOptions(List<String> rawList) {
+    final Map<String, int> frequencyMap = {};
+    for (var item in rawList) {
+      final trimmed = item.trim();
+      if (trimmed.isNotEmpty) {
+        frequencyMap[trimmed] = (frequencyMap[trimmed] ?? 0) + 1;
+      }
+    }
+    final sortedKeys = frequencyMap.keys.toList()
+      ..sort((a, b) => frequencyMap[b]!.compareTo(frequencyMap[a]!));
+    return sortedKeys;
+  }
+
+  // --- 共通サジェスト付きテキストフィールド（ドロップダウン/ポップアップ表示対応） ---
+  static Widget _buildAutocompleteField({
+    required TextEditingController controller,
+    required String label,
     required List<String> options,
-    required String initialValue,
-    required ValueChanged<String> onSelected,
   }) {
     return Autocomplete<String>(
-      initialValue: TextEditingValue(text: initialValue),
       optionsBuilder: (TextEditingValue textEditingValue) {
-        final query = textEditingValue.text.trim().toLowerCase();
-        if (query.isEmpty) {
+        if (textEditingValue.text.isEmpty) {
           return options;
         }
-
-        return options.where((option) {
-          final fullName = option.toLowerCase();
-          final prefix3 = (option.length >= 3 ? option.substring(0, 3) : option).toLowerCase();
-          
-          return fullName.contains(query) || prefix3.contains(query);
+        return options.where((String option) {
+          return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
         });
       },
-      onSelected: onSelected,
-      fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+      onSelected: (String selection) {
+        controller.text = selection;
+      },
+      fieldViewBuilder: (context, fieldController, focusNode, onFieldSubmitted) {
+        if (fieldController.text != controller.text && controller.text.isNotEmpty) {
+          fieldController.text = controller.text;
+        }
+        fieldController.addListener(() {
+          controller.text = fieldController.text;
+        });
+
         return TextField(
-          controller: controller,
+          controller: fieldController,
           focusNode: focusNode,
-          onEditingComplete: onEditingComplete,
-          onChanged: (text) {
-            onSelected(text);
-          },
-          decoration: const InputDecoration(
-            labelText: 'ブランド',
-            hintText: 'タップして選択または入力',
+          decoration: InputDecoration(
+            labelText: label,
+            suffixIcon: const Icon(Icons.arrow_drop_down, size: 20),
           ),
         );
       },
     );
   }
 
-  // 共通の購入時期用 Autocomplete ウィジェット
-  static Widget buildPeriodAutocomplete({
-    required List<String> options,
-    required String initialValue,
-    required ValueChanged<String> onSelected,
-  }) {
-    return Autocomplete<String>(
-      initialValue: TextEditingValue(text: initialValue),
-      optionsBuilder: (TextEditingValue textEditingValue) {
-        final query = textEditingValue.text.trim().toLowerCase();
-        if (query.isEmpty) return options;
-        return options.where((option) => option.toLowerCase().contains(query));
-      },
-      onSelected: onSelected,
-      fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-        return TextField(
-          controller: controller,
-          focusNode: focusNode,
-          onEditingComplete: onEditingComplete,
-          onChanged: (text) => onSelected(text),
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(
-            labelText: '購入時期 (例: 202506)',
-            hintText: 'タップして選択または入力',
-          ),
-        );
-      },
-    );
+  // --- 現在の年月からYYMMを自動生成するヘルパー (例: 2026年10月なら '2610') ---
+  static String get _currentYYMM {
+    final now = DateTime.now();
+    return '${(now.year % 100).toString().padLeft(2, '0')}${now.month.toString().padLeft(2, '0')}';
   }
 
   // ==========================================
-  // 新規登録ダイアログ群
+  // 1. 新規登録ダイアログ群（共通サジェスト化）
   // ==========================================
 
+  // 丸材(T) 新規登録
   static void showAddTubeDialog({
     required BuildContext context,
     required List<String> existingBrands,
     required List<String> existingPeriods,
     required List<String> existingVendors,
     required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(TubeStock newStock) onRegistered,
+    required Function(TubeStock) onRegistered,
   }) {
-    String selectedBrand = '';
-    String selectedPeriod = '';
-    final periodCtrl = TextEditingController(text: selectedPeriod);
-    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'T'));
-    String selectedVendor = '直輸入';
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
-    final countCtrl = TextEditingController(text: '10');
-    final memoCtrl = TextEditingController();
+    final brandController = TextEditingController();
+    final periodController = TextEditingController(text: _currentYYMM); // 常に本日のYYMMをデフォルトに
+    final diameterController = TextEditingController(text: '10-10.5');
+    final vendorController = TextEditingController();
+    final countController = TextEditingController(text: '10');
+    final memoController = TextEditingController();
 
-    void updateCode() {
-      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-      codeCtrl.text = getNextCode(b, p, 'T');
-    }
-
-    periodCtrl.addListener(updateCode);
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentVendors = _getFrequentOptions(existingVendors);
+    final frequentDiameters = _getFrequentOptions(['10-10.5', '10.5-11', '9.5-10', '10']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('丸材ストックの新規登録'),
+        title: const Text('丸材(T) 新規登録'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                  updateCode();
-                },
-              ),
-              buildPeriodAutocomplete(
-                options: existingPeriods,
-                initialValue: selectedPeriod,
-                onSelected: (val) {
-                  selectedPeriod = val;
-                  periodCtrl.text = val;
-                  updateCode();
-                },
-              ),
-              Autocomplete<String>(
-                optionsBuilder: (TextEditingValue textEditingValue) {
-                  if (textEditingValue.text.isEmpty) return existingVendors;
-                  return existingVendors.where((o) => o.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-                },
-                initialValue: TextEditingValue(text: selectedVendor),
-                onSelected: (selection) => selectedVendor = selection,
-                fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
-                  return TextField(controller: controller, focusNode: focusNode, onEditingComplete: onEditingComplete, decoration: const InputDecoration(labelText: '購入先'));
-                },
-              ),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '本数')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: '特徴メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド (例: Gonzalez)', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク (自動生成例: T01-Gon2506)')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: diameterController, label: '太さ', options: frequentDiameters),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: vendorController, label: '購入先', options: frequentVendors),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -149,16 +111,21 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              onRegistered(TubeStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: codeCtrl.text,
-                brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
-                purchasePeriod: periodCtrl.text.isEmpty ? '202506' : periodCtrl.text,
-                vendor: selectedVendor,
-                diameter: diameterCtrl.text,
-                memo: memoCtrl.text,
-                remainingCount: int.tryParse(countCtrl.text) ?? 0,
-              ));
+              final brand = brandController.text.trim();
+              final period = periodController.text.trim();
+              if (brand.isEmpty || period.isEmpty) return;
+
+              final id = getNextCode(brand, period, 'T');
+              final newStock = TubeStock(
+                id: id,
+                brand: brand,
+                purchasePeriod: period,
+                diameter: diameterController.text.trim(),
+                vendor: vendorController.text.trim().isEmpty ? null : vendorController.text.trim(),
+                remainingCount: int.tryParse(countController.text) ?? 1,
+                memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+              );
+              onRegistered(newStock);
               Navigator.pop(context);
             },
             child: const Text('登録'),
@@ -168,61 +135,40 @@ class StockDialogs {
     );
   }
 
+  // 半カマボコ(P) 新規登録（直接購入）
   static void showAddSplitDialog({
     required BuildContext context,
     required List<String> existingBrands,
     required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(SplitCaneStock newSplit) onRegistered,
+    required Function(SplitCaneStock) onRegistered,
   }) {
-    String selectedBrand = '';
-    String selectedPeriod = '';
-    final periodCtrl = TextEditingController(text: selectedPeriod);
-    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'P'));
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
-    final sourceCtrl = TextEditingController(text: '手動登録');
-    final countCtrl = TextEditingController(text: '10');
-    final memoCtrl = TextEditingController();
+    final brandController = TextEditingController();
+    final periodController = TextEditingController(text: _currentYYMM);
+    final diameterController = TextEditingController(text: '10-10.5');
+    final countController = TextEditingController(text: '10');
+    final memoController = TextEditingController();
 
-    void updateCode() {
-      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-      codeCtrl.text = getNextCode(b, p, 'P');
-    }
-
-    periodCtrl.addListener(updateCode);
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentDiameters = _getFrequentOptions(['10-10.5', '10.5-11', '9.5-10', '10']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('半カマボコストックの新規登録'),
+        title: const Text('半カマボコ(P) 新規登録（直接購入）'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                  updateCode();
-                },
-              ),
-              buildPeriodAutocomplete(
-                options: existingPeriods,
-                initialValue: selectedPeriod,
-                onSelected: (val) {
-                  selectedPeriod = val;
-                  periodCtrl.text = val;
-                  updateCode();
-                },
-              ),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: sourceCtrl, decoration: const InputDecoration(labelText: '由来メモ')),
-              TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク (自動生成例: P01-Gon2506)')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: diameterController, label: '太さ', options: frequentDiameters),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -230,16 +176,21 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              onRegistered(SplitCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: codeCtrl.text,
-                sourceInfo: sourceCtrl.text,
-                brand: selectedBrand.isEmpty ? 'Rigotti' : selectedBrand,
-                purchasePeriod: periodCtrl.text.isEmpty ? '202506' : periodCtrl.text,
-                diameter: diameterCtrl.text,
-                memo: memoCtrl.text,
-                remainingCount: int.tryParse(countCtrl.text) ?? 0,
-              ));
+              final brand = brandController.text.trim();
+              final period = periodController.text.trim();
+              if (brand.isEmpty) return;
+
+              final id = getNextCode(brand, period, 'P');
+              final stock = SplitCaneStock(
+                id: id,
+                brand: brand,
+                purchasePeriod: period,
+                diameter: diameterController.text.trim(),
+                sourceInfo: '直接購入',
+                remainingCount: int.tryParse(countController.text) ?? 1,
+                memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+              );
+              onRegistered(stock);
               Navigator.pop(context);
             },
             child: const Text('登録'),
@@ -249,63 +200,40 @@ class StockDialogs {
     );
   }
 
+  // カマボコ(G) 新規登録（直接購入）
   static void showAddGougedDialog({
     required BuildContext context,
     required List<String> existingBrands,
     required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(GougedCaneStock newStock) onRegistered,
+    required Function(GougedCaneStock) onRegistered,
   }) {
-    String selectedBrand = '';
-    String selectedPeriod = '';
-    final periodCtrl = TextEditingController(text: selectedPeriod);
-    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'G'));
-    final thickCtrl = TextEditingController(text: '0.58');
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
-    final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
-    final countCtrl = TextEditingController(text: '5');
-    final memoCtrl = TextEditingController();
+    final brandController = TextEditingController();
+    final periodController = TextEditingController(text: _currentYYMM);
+    final thickController = TextEditingController(text: '0.58');
+    final countController = TextEditingController(text: '10');
+    final memoController = TextEditingController();
 
-    void updateCode() {
-      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-      codeCtrl.text = getNextCode(b, p, 'G');
-    }
-
-    periodCtrl.addListener(updateCode);
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentThicks = _getFrequentOptions(['0.58', '0.59', '0.60', '0.57']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('カマボコストック(G)の新規登録'),
+        title: const Text('カマボコ(G) 新規登録（直接購入）'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                  updateCode();
-                },
-              ),
-              buildPeriodAutocomplete(
-                options: existingPeriods,
-                initialValue: selectedPeriod,
-                onSelected: (val) {
-                  selectedPeriod = val;
-                  periodCtrl.text = val;
-                  updateCode();
-                },
-              ),
-              TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
-              TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク (自動生成例: G01-Gon2506)')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: thickController, label: '目標厚さ (例: 0.58)', options: frequentThicks),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -313,19 +241,25 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-              final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-              onRegistered(GougedCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: codeCtrl.text,
-                sourceTitle: '$b ($p)',
-                machine: 'Michel',
-                targetThickness: thickCtrl.text,
-                diameter: diameterCtrl.text,
-                gougingDate: dateCtrl.text,
-                memo: memoCtrl.text,
-                remainingCount: int.tryParse(countCtrl.text) ?? 0,
-              ));
+              final brand = brandController.text.trim();
+              final period = periodController.text.trim();
+              if (brand.isEmpty) return;
+
+              final id = getNextCode(brand, period, 'G');
+              final thickness = double.tryParse(thickController.text.trim());
+
+              final stock = GougedCaneStock(
+                id: id,
+                brand: brand,
+                purchasePeriod: period,
+                diameter: '-',
+                machine: '既製品購入',
+                thickness: thickness,
+                gougingDate: DateTime.now().toString().split(' ')[0],
+                remainingCount: int.tryParse(countController.text) ?? 1,
+                memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+              );
+              onRegistered(stock);
               Navigator.pop(context);
             },
             child: const Text('登録'),
@@ -335,63 +269,43 @@ class StockDialogs {
     );
   }
 
+  // 舟形(S) 新規登録（直接購入）
   static void showAddShapedDialog({
     required BuildContext context,
     required List<String> existingBrands,
     required List<String> existingPeriods,
     required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(ShapedCaneStock newStock) onRegistered,
+    required Function(ShapedCaneStock) onRegistered,
   }) {
-    String selectedBrand = '';
-    String selectedPeriod = '';
-    final periodCtrl = TextEditingController(text: selectedPeriod);
-    final codeCtrl = TextEditingController(text: getNextCode('Rigotti', '202506', 'S'));
-    final shaperCtrl = TextEditingController(text: 'H39');
-    final diameterCtrl = TextEditingController(text: '10〜10.5mm');
-    final dateCtrl = TextEditingController(text: DateTime.now().toLocal().toString().split(' ')[0]);
-    final countCtrl = TextEditingController(text: '5');
-    final memoCtrl = TextEditingController();
+    final brandController = TextEditingController();
+    final periodController = TextEditingController(text: _currentYYMM);
+    final shaperController = TextEditingController(text: 'H39');
+    final thickController = TextEditingController(text: '0.58');
+    final countController = TextEditingController(text: '10');
+    final memoController = TextEditingController();
 
-    void updateCode() {
-      final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-      final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-      codeCtrl.text = getNextCode(b, p, 'S');
-    }
-
-    periodCtrl.addListener(updateCode);
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentShapers = _getFrequentOptions(['H39', 'H69', 'H25', 'Chiarugi 2']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('舟形ストック(S)の新規登録'),
+        title: const Text('舟形(S) 新規登録（直接購入）'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                  updateCode();
-                },
-              ),
-              buildPeriodAutocomplete(
-                options: existingPeriods,
-                initialValue: selectedPeriod,
-                onSelected: (val) {
-                  selectedPeriod = val;
-                  periodCtrl.text = val;
-                  updateCode();
-                },
-              ),
-              TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
-              TextField(controller: countCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '枚数')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク (自動生成例: S01-Gon2506)')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: shaperController, label: 'シェイパー型番 (例: H39)', options: frequentShapers),
+              const SizedBox(height: 8),
+              TextField(controller: thickController, decoration: const InputDecoration(labelText: '厚さ (任意)')),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -399,18 +313,86 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              final b = selectedBrand.isEmpty ? 'Rigotti' : selectedBrand;
-              final p = periodCtrl.text.isEmpty ? '202506' : periodCtrl.text;
-              onRegistered(ShapedCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: codeCtrl.text,
-                sourceTitle: '$b ($p)',
-                shaper: shaperCtrl.text,
-                diameter: diameterCtrl.text,
-                shapingDate: dateCtrl.text,
-                memo: memoCtrl.text,
-                remainingCount: int.tryParse(countCtrl.text) ?? 0,
-              ));
+              final brand = brandController.text.trim();
+              final period = periodController.text.trim();
+              if (brand.isEmpty) return;
+
+              final id = getNextCode(brand, period, 'S');
+              final thickness = double.tryParse(thickController.text.trim());
+
+              final stock = ShapedCaneStock(
+                id: id,
+                brand: brand,
+                purchasePeriod: period,
+                diameter: '-',
+                shaper: shaperController.text.trim(),
+                thickness: thickness,
+                shapingDate: DateTime.now().toString().split(' ')[0],
+                remainingCount: int.tryParse(countController.text) ?? 1,
+                memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+              );
+              onRegistered(stock);
+              Navigator.pop(context);
+            },
+            child: const Text('登録'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // チューブ 新規登録
+  static void showAddStapleDialog({
+    required BuildContext context,
+    required List<String> existingBrands,
+    required Function(List<StapleStock>) onRegistered,
+  }) {
+    final brandController = TextEditingController();
+    final modelController = TextEditingController(text: '2 46mm');
+    final lengthController = TextEditingController(text: '46');
+    final markController = TextEditingController(text: 'a');
+    final countController = TextEditingController(text: '10');
+
+    final frequentBrands = _getFrequentOptions(existingBrands);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('チューブ 新規登録'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildAutocompleteField(controller: brandController, label: 'ブランド (例: Chiarugi)', options: frequentBrands),
+            const SizedBox(height: 8),
+            TextField(controller: modelController, decoration: const InputDecoration(labelText: 'モデル (例: 2 46mm)')),
+            const SizedBox(height: 8),
+            TextField(controller: lengthController, decoration: const InputDecoration(labelText: '長さ')),
+            const SizedBox(height: 8),
+            TextField(controller: markController, decoration: const InputDecoration(labelText: 'マーク (例: a)')),
+            const SizedBox(height: 8),
+            TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () {
+              final brand = brandController.text.trim();
+              if (brand.isEmpty) return;
+              int count = int.tryParse(countController.text) ?? 1;
+
+              List<StapleStock> newStaples = [];
+              for (int i = 0; i < count; i++) {
+                newStaples.add(StapleStock(
+                  id: 'Staple_${DateTime.now().microsecondsSinceEpoch}_$i',
+                  brand: brand,
+                  model: modelController.text.trim(),
+                  length: lengthController.text.trim(),
+                  mark: markController.text.trim(),
+                  status: StapleStatus.unused,
+                ));
+              }
+              onRegistered(newStaples);
               Navigator.pop(context);
             },
             child: const Text('登録'),
@@ -421,7 +403,244 @@ class StockDialogs {
   }
 
   // ==========================================
-  // 編集ダイアログ群
+  // 2. 加工プロセスのダイアログ群（IDチェーン結合）
+  // ==========================================
+
+  static void showProcessTubeToSplitDialog({
+    required BuildContext context,
+    required TubeStock tube,
+    required String Function(String brand, String period, String typeLetter) getNextCode,
+    required Function(SplitCaneStock) onProcessed,
+  }) {
+    final countController = TextEditingController(text: '1');
+    final memoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('半カマボコ(P)へ加工'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('丸材 [${tube.displayTitle}] から半カマボコを作成します。'),
+              const SizedBox(height: 12),
+              TextField(
+                controller: countController,
+                decoration: const InputDecoration(labelText: '加工本数'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: memoController,
+                decoration: const InputDecoration(labelText: '加工メモ (任意)'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () {
+                int count = int.tryParse(countController.text) ?? 1;
+                if (count <= 0) count = 1;
+                if (count > tube.remainingCount) {
+                  count = tube.remainingCount;
+                }
+
+                Navigator.pop(context);
+                tube.remainingCount -= count;
+
+                String baseSeq = getNextCode(tube.brand, tube.purchasePeriod, 'P').split('-')[0];
+                String pId = '$baseSeq-${tube.id}';
+
+                final newSplit = SplitCaneStock(
+                  id: pId,
+                  brand: tube.brand,
+                  purchasePeriod: tube.purchasePeriod,
+                  diameter: tube.diameter,
+                  sourceInfo: tube.id,
+                  remainingCount: count,
+                  memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+                );
+                onProcessed(newSplit);
+              },
+              child: const Text('加工実行'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static void showProcessSplitToGougedDialog({
+    required BuildContext context,
+    required SplitCaneStock split,
+    required String Function(String brand, String period, String typeLetter) getNextCode,
+    required Function(GougedCaneStock) onProcessed,
+  }) {
+    final machineController = TextEditingController(text: 'ミヒャエル');
+    final thickController = TextEditingController(text: '0.58');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('カマボコ(G)へ加工'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('由来: ${split.id}'),
+            TextField(controller: machineController, decoration: const InputDecoration(labelText: 'ガウジングマシン')),
+            TextField(controller: thickController, decoration: const InputDecoration(labelText: '目標厚さ (例: 0.58)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              split.remainingCount--;
+
+              String baseSeq = getNextCode(split.brand, split.purchasePeriod, 'G').split('-')[0];
+              String gId = '$baseSeq-${split.id}';
+              double? thickness = double.tryParse(thickController.text.trim());
+
+              final newGouged = GougedCaneStock(
+                id: gId,
+                brand: split.brand,
+                purchasePeriod: split.purchasePeriod,
+                diameter: split.diameter,
+                machine: machineController.text.trim(),
+                thickness: thickness,
+                gougingDate: DateTime.now().toString().split(' ')[0],
+                remainingCount: 1,
+              );
+              onProcessed(newGouged);
+            },
+            child: const Text('加工実行'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void showProcessGougedToShapedDialog({
+    required BuildContext context,
+    required GougedCaneStock gouged,
+    required String Function(String brand, String period, String typeLetter) getNextCode,
+    required Function(ShapedCaneStock) onProcessed,
+  }) {
+    final shaperController = TextEditingController(text: 'H39');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('舟形(S)へ加工'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('由来: ${gouged.id}'),
+            TextField(controller: shaperController, decoration: const InputDecoration(labelText: 'シェイパー型番 (例: H39, H25)')),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              gouged.remainingCount--;
+
+              String baseSeq = getNextCode(gouged.brand, gouged.purchasePeriod, 'S').split('-')[0];
+              String sId = '$baseSeq-${gouged.id}';
+
+              final newShaped = ShapedCaneStock(
+                id: sId,
+                brand: gouged.brand,
+                purchasePeriod: gouged.purchasePeriod,
+                diameter: gouged.diameter,
+                shaper: shaperController.text.trim(),
+                thickness: gouged.thickness,
+                shapingDate: DateTime.now().toString().split(' ')[0],
+                remainingCount: 1,
+              );
+              onProcessed(newShaped);
+            },
+            child: const Text('加工実行'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static void showProcessShapedToTiedDialog({
+    required BuildContext context,
+    required ShapedCaneStock shaped,
+    required List<StapleStock> availableStaples,
+    required Function(TiedStock, StapleStock) onProcessed,
+  }) {
+    StapleStock? selectedStaple = availableStaples.isNotEmpty ? availableStaples.first : null;
+    final lengthController = TextEditingController(text: '73.0');
+    final colorController = TextEditingController(text: '赤');
+    final memoController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('チューブを選んで糸巻き'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ケーン: ${shaped.displayTitle}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                if (availableStaples.isEmpty)
+                  const Text('利用可能な未使用チューブがありません', style: TextStyle(color: Colors.red))
+                else
+                  DropdownButton<StapleStock>(
+                    isExpanded: true,
+                    value: selectedStaple,
+                    items: availableStaples.map((st) => DropdownMenuItem(value: st, child: Text('[${st.brand} ${st.model}] ${st.length} (${st.mark})'))).toList(),
+                    onChanged: (val) => setState(() => selectedStaple = val),
+                  ),
+                TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
+                TextField(controller: colorController, decoration: const InputDecoration(labelText: '糸の色')),
+                TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: selectedStaple == null ? null : () {
+                Navigator.pop(context);
+
+                String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                String tiedId = '$staplePrefix-${shaped.id}';
+
+                final tied = TiedStock(
+                  id: tiedId,
+                  stapleId: selectedStaple!.id,
+                  shapedCode: shaped.id,
+                  shapedTitle: shaped.displayTitle,
+                  tiedDate: DateTime.now().toString().split(' ')[0],
+                  totalLength: double.tryParse(lengthController.text) ?? 73.0,
+                  threadColor: colorController.text.trim(),
+                  memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
+                );
+                onProcessed(tied, selectedStaple!);
+              },
+              child: const Text('糸巻き完了'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================
+  // 3. 各種編集ダイアログ群（サジェスト機能統合）
   // ==========================================
 
   static void showEditTubeDialog({
@@ -430,34 +649,35 @@ class StockDialogs {
     required List<String> existingBrands,
     required VoidCallback onSaved,
   }) {
-    final codeCtrl = TextEditingController(text: tube.code);
-    String selectedBrand = tube.brand;
-    final periodCtrl = TextEditingController(text: tube.purchasePeriod);
-    final vendorCtrl = TextEditingController(text: tube.vendor ?? '');
-    final diameterCtrl = TextEditingController(text: tube.diameter);
-    final memoCtrl = TextEditingController(text: tube.memo ?? '');
+    final brandController = TextEditingController(text: tube.brand);
+    final periodController = TextEditingController(text: tube.purchasePeriod);
+    final diameterController = TextEditingController(text: tube.diameter);
+    final vendorController = TextEditingController(text: tube.vendor ?? '');
+    final countController = TextEditingController(text: tube.remainingCount.toString());
+    final memoController = TextEditingController(text: tube.memo ?? '');
+
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentDiameters = _getFrequentOptions(['10-10.5', '10.5-11', '9.5-10', '10']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('丸材ストックの編集'),
+        title: const Text('丸材(T) 編集'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                },
-              ),
-              TextField(controller: periodCtrl, decoration: const InputDecoration(labelText: '購入時期 (YYYYMM)')),
-              TextField(controller: vendorCtrl, decoration: const InputDecoration(labelText: '購入先')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: '特徴メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: diameterController, label: '太さ', options: frequentDiameters),
+              const SizedBox(height: 8),
+              TextField(controller: vendorController, decoration: const InputDecoration(labelText: '購入先')),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -465,12 +685,17 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              tube.code = codeCtrl.text;
-              tube.brand = selectedBrand;
-              tube.purchasePeriod = periodCtrl.text;
-              tube.vendor = vendorCtrl.text.isEmpty ? null : vendorCtrl.text;
-              tube.diameter = diameterCtrl.text;
-              tube.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
+              final brand = brandController.text.trim();
+              final period = periodController.text.trim();
+              if (brand.isEmpty || period.isEmpty) return;
+
+              tube.brand = brand;
+              tube.purchasePeriod = period;
+              tube.diameter = diameterController.text.trim();
+              tube.vendor = vendorController.text.trim().isEmpty ? null : vendorController.text.trim();
+              tube.remainingCount = int.tryParse(countController.text) ?? tube.remainingCount;
+              tube.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
               onSaved();
               Navigator.pop(context);
             },
@@ -487,34 +712,32 @@ class StockDialogs {
     required List<String> existingBrands,
     required VoidCallback onSaved,
   }) {
-    final codeCtrl = TextEditingController(text: split.code);
-    String selectedBrand = split.brand;
-    final periodCtrl = TextEditingController(text: split.purchasePeriod);
-    final diameterCtrl = TextEditingController(text: split.diameter);
-    final sourceCtrl = TextEditingController(text: split.sourceInfo);
-    final memoCtrl = TextEditingController(text: split.memo ?? '');
+    final brandController = TextEditingController(text: split.brand);
+    final periodController = TextEditingController(text: split.purchasePeriod);
+    final diameterController = TextEditingController(text: split.diameter);
+    final countController = TextEditingController(text: split.remainingCount.toString());
+    final memoController = TextEditingController(text: split.memo ?? '');
+
+    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentDiameters = _getFrequentOptions(['10-10.5', '10.5-11', '9.5-10', '10']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('半カマボコストックの編集'),
+        title: const Text('半カマボコ(P) 編集'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              buildBrandAutocomplete(
-                options: existingBrands,
-                initialValue: selectedBrand,
-                onSelected: (val) {
-                  selectedBrand = val;
-                },
-              ),
-              TextField(controller: periodCtrl, decoration: const InputDecoration(labelText: '購入時期 (YYYYMM)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: sourceCtrl, decoration: const InputDecoration(labelText: '由来メモ')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク')),
+              TextField(controller: periodController, decoration: const InputDecoration(labelText: '購入時期YYMM')),
+              const SizedBox(height: 8),
+              _buildAutocompleteField(controller: diameterController, label: '太さ', options: frequentDiameters),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -522,12 +745,12 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              split.code = codeCtrl.text;
-              split.brand = selectedBrand;
-              split.purchasePeriod = periodCtrl.text;
-              split.diameter = diameterCtrl.text;
-              split.sourceInfo = sourceCtrl.text;
-              split.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
+              split.brand = brandController.text.trim();
+              split.purchasePeriod = periodController.text.trim();
+              split.diameter = diameterController.text.trim();
+              split.remainingCount = int.tryParse(countController.text) ?? split.remainingCount;
+              split.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
               onSaved();
               Navigator.pop(context);
             },
@@ -543,28 +766,28 @@ class StockDialogs {
     required GougedCaneStock gouged,
     required VoidCallback onSaved,
   }) {
-    final codeCtrl = TextEditingController(text: gouged.code);
-    final titleCtrl = TextEditingController(text: gouged.sourceTitle);
-    final thickCtrl = TextEditingController(text: gouged.targetThickness);
-    final diameterCtrl = TextEditingController(text: gouged.diameter);
-    final dateCtrl = TextEditingController(text: gouged.gougingDate);
-    final memoCtrl = TextEditingController(text: gouged.memo ?? '');
+    final machineController = TextEditingController(text: gouged.machine);
+    final thickController = TextEditingController(text: gouged.thickness?.toString() ?? '');
+    final countController = TextEditingController(text: gouged.remainingCount.toString());
+    final memoController = TextEditingController(text: gouged.memo ?? '');
+
+    final frequentThicks = _getFrequentOptions(['0.58', '0.59', '0.60', '0.57']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('カマボコストックの編集'),
+        title: const Text('カマボコ(G) 編集'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材名')),
-              TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ(mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'ガウジング日')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              TextField(controller: machineController, decoration: const InputDecoration(labelText: 'ガウジングマシン')),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク')),
+              _buildAutocompleteField(controller: thickController, label: '厚さ', options: frequentThicks),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -572,12 +795,11 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              gouged.code = codeCtrl.text;
-              gouged.sourceTitle = titleCtrl.text;
-              gouged.targetThickness = thickCtrl.text;
-              gouged.diameter = diameterCtrl.text;
-              gouged.gougingDate = dateCtrl.text;
-              gouged.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
+              gouged.machine = machineController.text.trim();
+              gouged.thickness = double.tryParse(thickController.text.trim());
+              gouged.remainingCount = int.tryParse(countController.text) ?? gouged.remainingCount;
+              gouged.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
               onSaved();
               Navigator.pop(context);
             },
@@ -593,28 +815,28 @@ class StockDialogs {
     required ShapedCaneStock shaped,
     required VoidCallback onSaved,
   }) {
-    final codeCtrl = TextEditingController(text: shaped.code);
-    final titleCtrl = TextEditingController(text: shaped.sourceTitle);
-    final shaperCtrl = TextEditingController(text: shaped.shaper);
-    final diameterCtrl = TextEditingController(text: shaped.diameter);
-    final dateCtrl = TextEditingController(text: shaped.shapingDate);
-    final memoCtrl = TextEditingController(text: shaped.memo ?? '');
+    final shaperController = TextEditingController(text: shaped.shaper);
+    final thickController = TextEditingController(text: shaped.thickness?.toString() ?? '');
+    final countController = TextEditingController(text: shaped.remainingCount.toString());
+    final memoController = TextEditingController(text: shaped.memo ?? '');
+
+    final frequentShapers = _getFrequentOptions(['H39', 'H69', 'H25', 'Chiarugi 2']);
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('舟形ストックの編集'),
+        title: const Text('舟形(S) 編集'),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: '元素材/情報')),
-              TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: dateCtrl, decoration: const InputDecoration(labelText: 'シェイピング日')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
+              _buildAutocompleteField(controller: shaperController, label: 'シェイパー型番', options: frequentShapers),
               const SizedBox(height: 8),
-              TextField(controller: codeCtrl, decoration: const InputDecoration(labelText: '識別マーク')),
+              TextField(controller: thickController, decoration: const InputDecoration(labelText: '厚さ')),
+              const SizedBox(height: 8),
+              TextField(controller: countController, decoration: const InputDecoration(labelText: '数量'), keyboardType: TextInputType.number),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
           ),
         ),
@@ -622,12 +844,11 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              shaped.code = codeCtrl.text;
-              shaped.sourceTitle = titleCtrl.text;
-              shaped.shaper = shaperCtrl.text;
-              shaped.diameter = diameterCtrl.text;
-              shaped.shapingDate = dateCtrl.text;
-              shaped.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
+              shaped.shaper = shaperController.text.trim();
+              shaped.thickness = double.tryParse(thickController.text.trim());
+              shaped.remainingCount = int.tryParse(countController.text) ?? shaped.remainingCount;
+              shaped.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
               onSaved();
               Navigator.pop(context);
             },
@@ -638,610 +859,57 @@ class StockDialogs {
     );
   }
 
-  // ==========================================
-  // 加工移動ダイアログ群
-  // ==========================================
-
-  static void showProcessTubeToSplitDialog({
-    required BuildContext context,
-    required TubeStock tube,
-    required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(SplitCaneStock newSplit) onProcessed,
-  }) {
-    final useCountCtrl = TextEditingController(text: '5');
-    final yieldCountCtrl = TextEditingController(text: '13');
-    final newCodeCtrl = TextEditingController(text: getNextCode(tube.brand, tube.purchasePeriod, 'P'));
-    final memoCtrl = TextEditingController(text: '歩留まり良好');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${tube.brand} (${tube.purchasePeriod}) を分割'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('現在の丸材残り: ${tube.remainingCount}本', style: const TextStyle(color: Colors.grey)),
-              const SizedBox(height: 12),
-              TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '消費する丸材の本数')),
-              TextField(controller: yieldCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '出来上がった枚数')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: '加工メモ')),
-              const SizedBox(height: 8),
-              TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成する半カマボコの識別マーク')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () {
-              final useCount = int.tryParse(useCountCtrl.text) ?? 0;
-              final yieldCount = int.tryParse(yieldCountCtrl.text) ?? 0;
-
-              if (useCount <= 0 || yieldCount <= 0) return;
-              if (useCount > tube.remainingCount) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('在庫の丸材本数を超えています')));
-                return;
-              }
-
-              tube.remainingCount -= useCount;
-              onProcessed(SplitCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: newCodeCtrl.text,
-                sourceInfo: '${tube.code} から${useCount}本使用',
-                brand: tube.brand,
-                purchasePeriod: tube.purchasePeriod,
-                vendor: tube.vendor,
-                diameter: tube.diameter,
-                memo: memoCtrl.text,
-                remainingCount: yieldCount,
-              ));
-
-              Navigator.pop(context);
-            },
-            child: const Text('半カマボコへ変換'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static void showProcessSplitToGougedDialog({
-    required BuildContext context,
-    required SplitCaneStock split,
-    required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(GougedCaneStock newGouged) onProcessed,
-  }) {
-    final useCountCtrl = TextEditingController(text: '5');
-    final thickCtrl = TextEditingController(text: '0.58');
-    final diameterCtrl = TextEditingController(text: split.diameter);
-    final newCodeCtrl = TextEditingController(text: getNextCode(split.brand, split.purchasePeriod, 'G'));
-    final memoCtrl = TextEditingController(text: 'Michelマシン');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('${split.brand} 半カマボコをガウジング'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: '加工する枚数')),
-              TextField(controller: thickCtrl, decoration: const InputDecoration(labelText: '目標厚さ (mm)')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
-              const SizedBox(height: 8),
-              TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成するカマボコの識別マーク')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () {
-              final useCount = int.tryParse(useCountCtrl.text) ?? 0;
-              if (useCount <= 0 || useCount > split.remainingCount) return;
-
-              split.remainingCount -= useCount;
-              onProcessed(GougedCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: newCodeCtrl.text,
-                sourceTitle: '${split.brand} (${split.purchasePeriod})',
-                machine: 'Michel',
-                targetThickness: thickCtrl.text,
-                diameter: diameterCtrl.text,
-                gougingDate: DateTime.now().toLocal().toString().split(' ')[0],
-                memo: memoCtrl.text,
-                remainingCount: useCount,
-              ));
-
-              Navigator.pop(context);
-            },
-            child: const Text('カマボコへ変換'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  static void showProcessGougedToShapedDialog({
-    required BuildContext context,
-    required GougedCaneStock gouged,
-    required String Function(String brand, String period, String typeLetter) getNextCode,
-    required Function(ShapedCaneStock newShaped) onProcessed,
-  }) {
-    final useCountCtrl = TextEditingController(text: '5');
-    final shaperCtrl = TextEditingController(text: 'H39');
-    final diameterCtrl = TextEditingController(text: gouged.diameter);
-    
-    String brand = 'Rigotti';
-    String period = '202506';
-    if (gouged.code.contains('-')) {
-      final parts = gouged.code.split('-');
-      if (parts.length > 1) {
-        brand = parts[1].replaceAll(RegExp(r'\d'), '');
-        period = parts[1].replaceAll(RegExp(r'\D'), '');
-      }
-    }
-    final newCodeCtrl = TextEditingController(text: getNextCode(brand, period, 'S'));
-    final memoCtrl = TextEditingController(text: '綺麗にシェイプ完了');
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('カマボコをシェイピング'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: useCountCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'シェイプする枚数')),
-              TextField(controller: shaperCtrl, decoration: const InputDecoration(labelText: 'シェーパー型番')),
-              TextField(controller: diameterCtrl, decoration: const InputDecoration(labelText: '太さ')),
-              TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
-              const SizedBox(height: 8),
-              TextField(controller: newCodeCtrl, decoration: const InputDecoration(labelText: '生成する舟形の識別マーク')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () {
-              final useCount = int.tryParse(useCountCtrl.text) ?? 0;
-              if (useCount <= 0 || useCount > gouged.remainingCount) return;
-
-              gouged.remainingCount -= useCount;
-              onProcessed(ShapedCaneStock(
-                id: DateTime.now().microsecondsSinceEpoch.toString(),
-                code: newCodeCtrl.text,
-                sourceTitle: '${gouged.sourceTitle}${gouged.targetThickness}mm',
-                shaper: shaperCtrl.text,
-                diameter: diameterCtrl.text,
-                shapingDate: DateTime.now().toLocal().toString().split(' ')[0],
-                memo: memoCtrl.text,
-                remainingCount: useCount,
-              ));
-
-              Navigator.pop(context);
-            },
-            child: const Text('舟形へ変換'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================
-  // Staple (チューブ) 管理ダイアログ群
-  // ==========================================
-
-  static void showAddStapleDialog({
-    required BuildContext context,
-    required List<String> existingBrands,
-    required Function(List<StapleStock> newStaples) onRegistered,
-  }) {
-    String selectedBrand = '';
-    final modelCtrl = TextEditingController(text: '2');
-    final lengthCtrl = TextEditingController(text: '46');
-    final materialCtrl = TextEditingController(text: 'Brass');
-    final startMarkCtrl = TextEditingController(text: 'a');
-    final endMarkCtrl = TextEditingController(text: 'z');
-    final singleMarkCtrl = TextEditingController(text: 'a');
-    final memoCtrl = TextEditingController();
-    bool isBatchMode = true;
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          final brandForPreview = selectedBrand.isEmpty ? 'Chiarugi' : selectedBrand;
-          String previewId = isBatchMode
-              ? '$brandForPreview${modelCtrl.text}${lengthCtrl.text}${startMarkCtrl.text}〜'
-              : '$brandForPreview${modelCtrl.text}${lengthCtrl.text}${singleMarkCtrl.text}';
-
-          return AlertDialog(
-            title: const Text('チューブ (Staple) の新規登録'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  buildBrandAutocomplete(
-                    options: existingBrands.isEmpty ? ['Chiarugi', 'Rigotti', 'Loree', 'Glotin', 'Guercio'] : existingBrands,
-                    initialValue: selectedBrand,
-                    onSelected: (val) {
-                      setState(() => selectedBrand = val);
-                    },
-                  ),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: modelCtrl,
-                          decoration: const InputDecoration(labelText: 'モデル (例: 2)'),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: TextField(
-                          controller: lengthCtrl,
-                          decoration: const InputDecoration(labelText: '全長数値 (例: 46)'),
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                    ],
-                  ),
-                  TextField(
-                    controller: materialCtrl,
-                    decoration: const InputDecoration(labelText: '材質'),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    title: const Text('マークを連番で一括生成 (a〜z等)'),
-                    value: isBatchMode,
-                    contentPadding: EdgeInsets.zero,
-                    onChanged: (val) => setState(() => isBatchMode = val),
-                  ),
-                  if (isBatchMode) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: startMarkCtrl,
-                            decoration: const InputDecoration(labelText: '開始マーク (例: a)'),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        const Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 8.0),
-                          child: Text('〜'),
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: endMarkCtrl,
-                            decoration: const InputDecoration(labelText: '終了マーク (例: ah)'),
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ] else ...[
-                    TextField(
-                      controller: singleMarkCtrl,
-                      decoration: const InputDecoration(labelText: '個体マーク (例: ah)'),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  Text('プレビュー: $previewId', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                  TextField(
-                    controller: memoCtrl,
-                    decoration: const InputDecoration(labelText: 'メモ'),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-              ElevatedButton(
-                onPressed: () {
-                  final List<StapleStock> generatedList = [];
-                  final now = DateTime.now();
-                  final brandToUse = selectedBrand.isEmpty ? 'Chiarugi' : selectedBrand;
-
-                  if (isBatchMode) {
-                    final start = startMarkCtrl.text.trim().toLowerCase();
-                    final end = endMarkCtrl.text.trim().toLowerCase();
-                    final marks = _generateLetterSequence(start, end);
-
-                    for (int i = 0; i < marks.length; i++) {
-                      generatedList.add(StapleStock(
-                        // ★ 一意な主キー（id）を付与
-                        id: '${now.microsecondsSinceEpoch}_$i',
-                        brand: brandToUse,
-                        model: modelCtrl.text,
-                        length: lengthCtrl.text,
-                        mark: marks[i],
-                        material: materialCtrl.text,
-                        memo: memoCtrl.text.isEmpty ? null : memoCtrl.text,
-                      ));
-                    }
-                  } else {
-                    generatedList.add(StapleStock(
-                      id: now.microsecondsSinceEpoch.toString(),
-                      brand: brandToUse,
-                      model: modelCtrl.text,
-                      length: lengthCtrl.text,
-                      mark: singleMarkCtrl.text.trim(),
-                      material: materialCtrl.text,
-                      memo: memoCtrl.text.isEmpty ? null : memoCtrl.text,
-                    ));
-                  }
-
-                  onRegistered(generatedList);
-                  Navigator.pop(context);
-                },
-                child: Text(isBatchMode ? '一括登録' : '登録'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   static void showEditStapleDialog({
     required BuildContext context,
     required StapleStock staple,
     required List<String> existingBrands,
     required VoidCallback onSaved,
   }) {
-    String selectedBrand = staple.brand;
-    final modelCtrl = TextEditingController(text: staple.model);
-    final lengthCtrl = TextEditingController(text: staple.length);
-    final markCtrl = TextEditingController(text: staple.mark);
-    final materialCtrl = TextEditingController(text: staple.material);
-    final memoCtrl = TextEditingController(text: staple.memo ?? '');
-    StapleStatus selectedStatus = staple.status;
+    final brandController = TextEditingController(text: staple.brand);
+    final modelController = TextEditingController(text: staple.model);
+    final lengthController = TextEditingController(text: staple.length);
+    final markController = TextEditingController(text: staple.mark);
+    final memoController = TextEditingController(text: staple.memo ?? '');
+
+    final frequentBrands = _getFrequentOptions(existingBrands);
 
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          String currentIdPreview = '$selectedBrand${modelCtrl.text}${lengthCtrl.text}${markCtrl.text}';
-
-          return AlertDialog(
-            title: Text('Staple [$currentIdPreview] の編集'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  buildBrandAutocomplete(
-                    options: existingBrands,
-                    initialValue: selectedBrand,
-                    onSelected: (val) => setState(() => selectedBrand = val),
-                  ),
-                  Row(
-                    children: [
-                      Expanded(child: TextField(controller: modelCtrl, decoration: const InputDecoration(labelText: 'モデル'), onChanged: (_) => setState(() {}))),
-                      const SizedBox(width: 8),
-                      Expanded(child: TextField(controller: lengthCtrl, decoration: const InputDecoration(labelText: '全長数値'), onChanged: (_) => setState(() {}))),
-                    ],
-                  ),
-                  TextField(controller: markCtrl, decoration: const InputDecoration(labelText: '個体マーク (例: ah)'), onChanged: (_) => setState(() {})),
-                  TextField(controller: materialCtrl, decoration: const InputDecoration(labelText: '材質')),
-                  DropdownButtonFormField<StapleStatus>(
-                    value: selectedStatus,
-                    decoration: const InputDecoration(labelText: 'ステータス'),
-                    items: StapleStatus.values.map((status) {
-                      return DropdownMenuItem(
-                        value: status,
-                        child: Text(status.label),
-                      );
-                    }).toList(),
-                    onChanged: (val) {
-                      if (val != null) setState(() => selectedStatus = val);
-                    },
-                  ),
-                  TextField(controller: memoCtrl, decoration: const InputDecoration(labelText: 'メモ')),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-              ElevatedButton(
-                onPressed: () {
-                  staple.brand = selectedBrand;
-                  staple.model = modelCtrl.text;
-                  staple.length = lengthCtrl.text;
-                  staple.mark = markCtrl.text.trim();
-                  staple.material = materialCtrl.text;
-                  staple.status = selectedStatus;
-                  staple.memo = memoCtrl.text.isEmpty ? null : memoCtrl.text;
-                  onSaved();
-                  Navigator.pop(context);
-                },
-                child: const Text('保存'),
-              ),
+      builder: (context) => AlertDialog(
+        title: const Text('チューブ 編集'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
+              const SizedBox(height: 8),
+              TextField(controller: modelController, decoration: const InputDecoration(labelText: 'モデル')),
+              const SizedBox(height: 8),
+              TextField(controller: lengthController, decoration: const InputDecoration(labelText: '長さ')),
+              const SizedBox(height: 8),
+              TextField(controller: markController, decoration: const InputDecoration(labelText: 'マーク')),
+              const SizedBox(height: 8),
+              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
             ],
-          );
-        },
-      ),
-    );
-  }
-
-  static List<String> _generateLetterSequence(String start, String end) {
-    List<String> result = [];
-    int startVal = _letterToVal(start);
-    int endVal = _letterToVal(end);
-
-    if (startVal > endVal) return [start];
-
-    for (int i = startVal; i <= endVal; i++) {
-      result.add(_valToLetter(i));
-    }
-    return result;
-  }
-
-  static int _letterToVal(String str) {
-    int val = 0;
-    for (int i = 0; i < str.length; i++) {
-      val = val * 26 + (str.codeUnitAt(i) - 'a'.codeUnitAt(0) + 1);
-    }
-    return val;
-  }
-
-  static String _valToLetter(int val) {
-    String res = '';
-    while (val > 0) {
-      int rem = (val - 1) % 26;
-      res = String.fromCharCode('a'.codeUnitAt(0) + rem) + res;
-      val = (val - 1) ~/ 26;
-    }
-    return res;
-  }
-
-  static void showProcessShapedToTiedDialog({
-    required BuildContext context,
-    required ShapedCaneStock shaped,
-    required List<StapleStock> availableStaples,
-    required Function(TiedStock newTied, StapleStock selectedStaple) onProcessed,
-  }) {
-    if (availableStaples.isEmpty) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('未使用のチューブがありません'),
-          content: const Text('糸巻きに使用できる「未使用(unused)」のチューブ(Staple)がストックにありません。先にチューブを登録してください。'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('OK'),
-            ),
-          ],
+          ),
         ),
-      );
-      return;
-    }
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+          ElevatedButton(
+            onPressed: () {
+              staple.brand = brandController.text.trim();
+              staple.model = modelController.text.trim();
+              staple.length = lengthController.text.trim();
+              staple.mark = markController.text.trim();
+              staple.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
 
-    StapleStock selectedStaple = availableStaples.first;
-    final lengthController = TextEditingController(text: '73.0');
-    final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
-    
-    final List<String> threadTypes = ['ナイロン', 'ポリエステル', '絹'];
-    final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
-    
-    String selectedType = 'ナイロン';
-    String selectedColor = '赤';
-
-    final memoController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              title: Text('糸巻き(Tying)登録 - ${shaped.code}'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    DropdownButtonFormField<StapleStock>(
-                      value: selectedStaple,
-                      decoration: const InputDecoration(labelText: '使用するチューブ (Staple)'),
-                      style: const TextStyle(fontSize: 16, color: Colors.black),
-                      items: availableStaples.map((staple) {
-                        return DropdownMenuItem<StapleStock>(
-                          value: staple,
-                          child: Text(
-                            '${staple.brand} ${staple.model} (${staple.length}) ${staple.mark}',
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) setState(() => selectedStaple = val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: lengthController,
-                      decoration: const InputDecoration(
-                        labelText: '糸巻き全長 (mm)',
-                        hintText: '73.0',
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: dateController,
-                      decoration: const InputDecoration(labelText: '糸巻き日 (YYYY-MM-DD)'),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          flex: 3,
-                          child: DropdownButtonFormField<String>(
-                            value: selectedType,
-                            decoration: const InputDecoration(labelText: '糸の種類'),
-                            items: threadTypes.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
-                            onChanged: (val) => setState(() => selectedType = val ?? 'ナイロン'),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 2,
-                          child: DropdownButtonFormField<String>(
-                            value: selectedColor,
-                            decoration: const InputDecoration(labelText: '糸の色'),
-                            items: threadColors.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                            onChanged: (val) => setState(() => selectedColor = val ?? '赤'),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: memoController,
-                      decoration: const InputDecoration(labelText: 'メモ'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('キャンセル'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final combinedThreadColor = '$selectedType$selectedColor';
-
-                    final newTied = TiedStock(
-                      id: DateTime.now().microsecondsSinceEpoch.toString(),
-                      // ★ ここが文字列の stapleId ではなく、マスターの不変 ID (UUID) を保持するよう変更
-                      stapleId: selectedStaple.id, 
-                      shapedCode: shaped.code,
-                      shapedTitle: shaped.displayTitle,
-                      tiedDate: dateController.text,
-                      totalLength: lengthController.text.isEmpty ? '73.0' : lengthController.text,
-                      threadColor: combinedThreadColor,
-                      memo: memoController.text.isEmpty ? null : memoController.text,
-                    );
-
-                    onProcessed(newTied, selectedStaple);
-                    Navigator.pop(context);
-                  },
-                  child: const Text('糸巻き完了'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+              onSaved();
+              Navigator.pop(context);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
     );
   }
 }
