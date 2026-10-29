@@ -750,9 +750,10 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                           ),
                           if (item.id.isNotEmpty) ...[
                             const SizedBox(width: 8),
-                            Text('(', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                            ReedIdUtils.buildClickableIdParts(context, item.id, _tabController),
-                            Text(')', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                            Text(
+                              '(ID: ${item.id})',
+                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                            ) 
                           ],
                         ],
                       ),
