@@ -243,6 +243,7 @@ class StapleStock {
 
   String get displayTitle => '$brand $model $length';
 
+  // 【修正点】Enumのネーム（文字列）で書き出し
   Map<String, dynamic> toJson() => {
     'id': id,
     'brand': brand,
@@ -250,20 +251,36 @@ class StapleStock {
     'length': length,
     'mark': mark,
     'material': material,
-    'status': status.index,
+    'status': status.name, // "unused", "tied", "used" として保存
     'memo': memo,
   };
 
-  factory StapleStock.fromJson(Map<String, dynamic> json) => StapleStock(
-    id: json['id'] ?? '',
-    brand: json['brand'] ?? '',
-    model: json['model'] ?? '',
-    length: json['length'] ?? '',
-    mark: json['mark'] ?? '',
-    material: json['material'] ?? 'ブラス',
-    status: StapleStatus.values[json['status'] ?? 0],
-    memo: json['memo'],
-  );
+  // 【修正点】文字列から安全に復元（過去データで数値が入っていてもフォールバックするように保護）
+  factory StapleStock.fromJson(Map<String, dynamic> json) {
+    StapleStatus parsedStatus = StapleStatus.unused;
+    final statusVal = json['status'];
+    
+    if (statusVal is String) {
+      parsedStatus = StapleStatus.values.firstWhere(
+        (e) => e.name == statusVal,
+        orElse: () => StapleStatus.unused,
+      );
+    } else if (statusVal is int && statusVal >= 0 && statusVal < StapleStatus.values.length) {
+      // 過去に数値で保存された既存データとの上位互換性確保
+      parsedStatus = StapleStatus.values[statusVal];
+    }
+
+    return StapleStock(
+      id: json['id'] ?? '',
+      brand: json['brand'] ?? '',
+      model: json['model'] ?? '',
+      length: json['length'] ?? '',
+      mark: json['mark'] ?? '',
+      material: json['material'] ?? 'ブラス',
+      status: parsedStatus,
+      memo: json['memo'],
+    );
+  }
 }
 
 // 6. 糸巻き (Tied) モデル
@@ -318,7 +335,7 @@ class WorkReed {
   String shapedCode;
   String shapedTitle;
   String tiedDate;
-  String currentTotalLength; // adjustment_work_page.dart に合わせて String に統一
+  String currentTotalLength;
   int qualityLevel;
   String? threadColor;
   List<String> photosBase64;
@@ -330,7 +347,7 @@ class WorkReed {
     required this.shapedCode,
     required this.shapedTitle,
     required this.tiedDate,
-    required dynamic currentTotalLength, // doubleでもStringでも安全に受け取ってStringにする
+    required dynamic currentTotalLength,
     required this.qualityLevel,
     this.threadColor,
     List<String>? photosBase64,
@@ -372,7 +389,8 @@ class WorkLog {
   String id;
   String date;
   int level;
-  String totalLength; // adjustment_work_page.dart に合わせて String に統一
+  String totalLength; // 全長
+  String? length;     // カット後の長さ／実測値
   String? resistanceRating;
   String? pitchRating;
   String memo;
@@ -387,13 +405,15 @@ class WorkLog {
     this.pitchRating,
     required this.memo,
   }) : this.id = id ?? DateTime.now().microsecondsSinceEpoch.toString(),
-       this.totalLength = (totalLength ?? length ?? '0.0').toString();
+       this.totalLength = (totalLength ?? '0.0').toString(),
+       this.length = length?.toString();
 
   Map<String, dynamic> toJson() => {
     'id': id,
     'date': date,
     'level': level,
     'totalLength': totalLength,
+    if (length != null) 'length': length,
     'resistanceRating': resistanceRating,
     'pitchRating': pitchRating,
     'memo': memo,
@@ -403,7 +423,8 @@ class WorkLog {
     id: json['id'],
     date: json['date'] ?? '',
     level: json['level'] ?? 1,
-    totalLength: json['totalLength']?.toString() ?? json['length']?.toString() ?? '0.0',
+    totalLength: json['totalLength']?.toString() ?? '0.0',
+    length: json['length']?.toString(),
     resistanceRating: json['resistanceRating'],
     pitchRating: json['pitchRating'],
     memo: json['memo'] ?? '',
