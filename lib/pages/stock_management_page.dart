@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import '../dialogs.dart';
 import '../utils/helpers.dart';
+import '../utils/reed_id_utils.dart';
 import '../main.dart'; // MainRootPage.switchPage 呼び出し用
 
 class MainStockNavigationPage extends StatefulWidget {
@@ -31,7 +32,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
     list.sort((a, b) {
-      int c = b.brand.compareTo(a.brand); // ブランド降順（必要に応じて調整）
+      int c = b.brand.compareTo(a.brand);
       if (c != 0) return c;
       c = b.model.compareTo(a.model);
       if (c != 0) return c;
@@ -151,6 +152,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         currentTotalLength: tied.totalLength.toString(),
         qualityLevel: 1,
         threadColor: tied.threadColor,
+        vendor: tied.vendor,
         logs: [],
       );
       currentWorkReeds.add(newWorkReed);
@@ -168,11 +170,20 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     Set<String> brands = {'Rigotti', 'Tchankaya', 'Alliaud', 'Chiarugi', 'Loree', 'Glotin', 'Guercio'};
     for (var t in _tubeStocks) { if (t.brand.isNotEmpty) brands.add(t.brand); }
     for (var s in _splitStocks) { if (s.brand.isNotEmpty) brands.add(s.brand); }
-    for (var g in _gougedStocks) { 
-      if (g.sourceTitle.isNotEmpty) brands.add(g.sourceTitle.split(' ')[0]); 
-    }
+    for (var g in _gougedStocks) { if (g.brand.isNotEmpty) brands.add(g.brand); }
+    for (var sh in _shapedStocks) { if (sh.brand.isNotEmpty) brands.add(sh.brand); }
     for (var st in stapleStocks) { if (st.brand.isNotEmpty) brands.add(st.brand); }
     return brands.toList();
+  }
+
+  List<String> _getAllExistingVendors() {
+    Set<String> vendors = {};
+    for (var t in _tubeStocks) { if (t.vendor != null && t.vendor!.isNotEmpty) vendors.add(t.vendor!); }
+    for (var s in _splitStocks) { if (s.vendor != null && s.vendor!.isNotEmpty) vendors.add(s.vendor!); }
+    for (var g in _gougedStocks) { if (g.vendor != null && g.vendor!.isNotEmpty) vendors.add(g.vendor!); }
+    for (var sh in _shapedStocks) { if (sh.vendor != null && sh.vendor!.isNotEmpty) vendors.add(sh.vendor!); }
+    for (var td in _tiedStocks) { if (td.vendor != null && td.vendor!.isNotEmpty) vendors.add(td.vendor!); }
+    return vendors.toList();
   }
 
   List<String> _getAllExistingPeriods() {
@@ -296,33 +307,59 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   void _openAddDialogForCurrentTab() {
     final existingBrands = _getAllExistingBrands();
     final existingPeriods = _getAllExistingPeriods();
-    final existingVendors = _tubeStocks.map((e) => e.vendor ?? '').where((e) => e.isNotEmpty).toSet().toList();
+    final existingVendors = _getAllExistingVendors();
 
     switch (_tabController.index) {
       case 0:
-        StockDialogs.showAddTubeDialog(
-          context: context, 
-          existingBrands: existingBrands, 
-          existingPeriods: existingPeriods, 
-          existingVendors: existingVendors, 
-          getNextCode: _getNextCode, 
-          onRegistered: (newStock) { 
-            setState(() => _tubeStocks.insert(0, newStock)); // ← .add から insert(0) に変更してトップへ！
-            _saveData(); 
-          },
+        StockDialogs.showAddCaneDialog(
+          context: context,
+          caneType: CaneType.tube,
+          existingBrands: existingBrands,
+          existingPeriods: existingPeriods,
+          existingVendors: existingVendors,
+          getNextCode: _getNextCode,
+          onRegistered: (newStock) { setState(() => _tubeStocks.insert(0, newStock)); _saveData(); },
         );
         break;
       case 1:
-        StockDialogs.showAddSplitDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _splitStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddCaneDialog(
+          context: context,
+          caneType: CaneType.split,
+          existingBrands: existingBrands,
+          existingPeriods: existingPeriods,
+          existingVendors: existingVendors,
+          getNextCode: _getNextCode,
+          onRegistered: (newStock) { setState(() => _splitStocks.insert(0, newStock)); _saveData(); },
+        );
         break;
       case 2:
-        StockDialogs.showAddGougedDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _gougedStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddCaneDialog(
+          context: context,
+          caneType: CaneType.gouged,
+          existingBrands: existingBrands,
+          existingPeriods: existingPeriods,
+          existingVendors: existingVendors,
+          getNextCode: _getNextCode,
+          onRegistered: (newStock) { setState(() => _gougedStocks.insert(0, newStock)); _saveData(); },
+        );
         break;
       case 3:
-        StockDialogs.showAddShapedDialog(context: context, existingBrands: existingBrands, existingPeriods: existingPeriods, getNextCode: _getNextCode, onRegistered: (newStock) { setState(() => _shapedStocks.add(newStock)); _saveData(); });
+        StockDialogs.showAddCaneDialog(
+          context: context,
+          caneType: CaneType.shaped,
+          existingBrands: existingBrands,
+          existingPeriods: existingPeriods,
+          existingVendors: existingVendors,
+          getNextCode: _getNextCode,
+          onRegistered: (newStock) { setState(() => _shapedStocks.insert(0, newStock)); _saveData(); },
+        );
         break;
       case 4:
-        StockDialogs.showAddStapleDialog(context: context, existingBrands: existingBrands, onRegistered: (newStaples) { setState(() => stapleStocks.addAll(newStaples)); _saveData(); });
+        StockDialogs.showAddStapleDialog(
+          context: context,
+          existingBrands: existingBrands,
+          onRegistered: (newStaples) { setState(() => stapleStocks.addAll(newStaples)); _saveData(); },
+        );
         break;
       case 5:
         break;
@@ -365,7 +402,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             Tab(icon: Icon(Icons.call_split), text: '2. 半カマボコ(P)'),
             Tab(icon: Icon(Icons.density_medium), text: '3. カマボコ(G)'),
             Tab(icon: Icon(Icons.content_cut), text: '4. 舟形(S)'),
-            Tab(icon: Icon(Icons.architecture), text: '5. チューブ(Staple)'),
+            Tab(icon: Icon(Icons.architecture), text: '5. チューブ(Hülse)'),
             Tab(icon: Icon(Icons.waves), text: '6. 糸巻き(Tied)'),
           ],
         ),
@@ -385,7 +422,17 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     );
   }
 
-  Widget _buildStockCard({required String title, required String subtitle, required int count, required VoidCallback onIncrement, required VoidCallback onDecrement, required VoidCallback onEdit, required VoidCallback onDelete, Widget? processButton}) {
+  Widget _buildStockCard({
+    required String displayTitle,
+    required String fullId,
+    required String subtitle,
+    required int count,
+    required VoidCallback onIncrement,
+    required VoidCallback onDecrement,
+    required VoidCallback onEdit,
+    required VoidCallback onDelete,
+    Widget? processButton,
+  }) {
     final bool isInStock = count > 0;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -397,16 +444,66 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           children: [
             Row(
               children: [
-                Expanded(child: Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInStock ? Colors.black : Colors.grey.shade600))),
+                Expanded(
+                  child: Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        displayTitle,
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: isInStock ? Colors.black : Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '(',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isInStock ? Colors.black54 : Colors.grey.shade600,
+                        ),
+                      ),
+                      // IDパーツをインタラクティブに生成（クリックで該当タブへジャンプ）
+                      ReedIdUtils.buildClickableIdParts(context, fullId, _tabController),
+                      Text(
+                        ')',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isInStock ? Colors.black54 : Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 if (!isInStock) ...[
-                  Container(margin: const EdgeInsets.only(right: 4), padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(4)), child: const Text('在庫なし', style: TextStyle(fontSize: 12, color: Colors.white))),
+                  Container(
+                    margin: const EdgeInsets.only(right: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text('在庫なし', style: TextStyle(fontSize: 12, color: Colors.white)),
+                  ),
                 ],
-                IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), tooltip: '編集', onPressed: onEdit),
-                IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: '削除', onPressed: onDelete),
+                IconButton(
+                  icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                  tooltip: '編集',
+                  onPressed: onEdit,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  tooltip: '削除',
+                  onPressed: onDelete,
+                ),
               ],
             ),
             const SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(color: isInStock ? Colors.black87 : Colors.grey.shade600)),
+            Text(
+              subtitle,
+              style: TextStyle(color: isInStock ? Colors.black87 : Colors.grey.shade600),
+            ),
             const Divider(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -415,9 +512,22 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IconButton(icon: const Icon(Icons.remove_circle_outline), onPressed: count > 0 ? onDecrement : null),
-                    Text('$count本', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isInStock ? Colors.black : Colors.grey.shade600)),
-                    IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: onIncrement),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: count > 0 ? onDecrement : null,
+                    ),
+                    Text(
+                      '$count本',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: isInStock ? Colors.black : Colors.grey.shade600,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: onIncrement,
+                    ),
                   ],
                 ),
               ],
@@ -428,173 +538,187 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     );
   }
 
-  Widget _buildTubeStockTab() {
-    List<TubeStock> items = _showOnlyInStock ? _tubeStocks.where((e) => e.remainingCount > 0).toList() : List.from(_tubeStocks);
-    // コードの降順（新しいものが上）にソート
-    items.sort((a, b) => b.code.compareTo(a.code));
+  // =========================================================================
+  // ★ 4つのタブを統合した汎用ケーンタブ描画メソッド（共通化部分）
+  // =========================================================================
+  Widget _buildCaneStockTab<T>({
+    required List<T> items,
+    required String Function(T) getCode,
+    required String Function(T) getDisplayTitle,
+    required String Function(T) getId,
+    required String Function(T) getSubtitle,
+    required int Function(T) getCount,
+    required void Function(T, int) setCount,
+    required VoidCallback onAddStock,
+    required VoidCallback Function(T) onDelete,
+    required String processButtonLabel,
+    required IconData processButtonIcon,
+    required VoidCallback Function(T) onProcess,
+    required String emptyMessage,
+  }) {
+    List<T> filteredItems = _showOnlyInStock 
+        ? items.where((e) => getCount(e) > 0).toList() 
+        : List.from(items);
+    
+    filteredItems.sort((a, b) => getCode(b).compareTo(getCode(a)));
 
-    if (items.isEmpty) return const Center(child: Text('表示する丸材ストックがありません'));
+    if (filteredItems.isEmpty) return Center(child: Text(emptyMessage));
+
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
+      itemCount: filteredItems.length,
       itemBuilder: (context, i) {
-        final item = items[i];
+        final item = filteredItems[i];
+        final count = getCount(item);
+
         return _buildStockCard(
-          title: item.displayTitle,
-          subtitle: '太さ: ${item.diameter} | 購入先: ${item.vendor ?? "未登録"}\nメモ: ${item.memo ?? "-"}',
-          count: item.remainingCount,
-          onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
-          onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
-          onEdit: () => StockDialogs.showEditTubeDialog(context: context, tube: item, existingBrands: _getAllExistingBrands(), onSaved: () { setState(() {}); _saveData(); }),
-          onDelete: () => _confirmDelete(() { setState(() => _tubeStocks.remove(item)); _saveData(); }),
+          displayTitle: getDisplayTitle(item),
+          fullId: getId(item),
+          subtitle: getSubtitle(item),
+          count: count,
+          onIncrement: () { setState(() => setCount(item, count + 1)); _saveData(); },
+          onDecrement: () { setState(() => setCount(item, count - 1)); _saveData(); },
+          onEdit: () => StockDialogs.showEditCaneDialog(
+            context: context,
+            stock: item,
+            existingBrands: _getAllExistingBrands(),
+            existingVendors: _getAllExistingVendors(),
+            onSaved: () { setState(() {}); _saveData(); },
+          ),
+          onDelete: onDelete(item),
           processButton: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
-            icon: const Icon(Icons.call_split, size: 16),
-            label: const Text('半カマボコ(P)へ加工'),
-            onPressed: () => StockDialogs.showProcessTubeToSplitDialog(
-              context: context,
-              tube: item,
-              getNextCode: _getNextCode,
-              onProcessed: (newSplit) {
-                setState(() {
-                  _splitStocks.insert(0, newSplit); // ← リストの先頭（Top）に強制的に挿入する
-                });
-                _saveData();
-                _tabController.animateTo(1);
-              },
-            ),
+            icon: Icon(processButtonIcon, size: 16),
+            label: Text(processButtonLabel),
+            onPressed: onProcess(item),
           ),
         );
       },
+    );
+  }
+
+  // =========================================================================
+  // 各タブの呼び出し定義
+  // =========================================================================
+  Widget _buildTubeStockTab() {
+    return _buildCaneStockTab<TubeStock>(
+      items: _tubeStocks,
+      getCode: (e) => e.code,
+      getDisplayTitle: (e) => e.displayTitle,
+      getId: (e) => e.id,
+      getSubtitle: (e) => '太さ: ${e.diameter} | 購入先: ${e.vendor ?? "未登録"}\nメモ: ${e.memo ?? "-"}',
+      getCount: (e) => e.remainingCount,
+      setCount: (e, val) => e.remainingCount = val,
+      onAddStock: () {},
+      onDelete: (item) => () => _confirmDelete(() { setState(() => _tubeStocks.remove(item)); _saveData(); }),
+      processButtonLabel: '半カマボコ(P)へ加工',
+      processButtonIcon: Icons.call_split,
+      onProcess: (item) => () => StockDialogs.showProcessTubeToSplitDialog(
+        context: context,
+        tube: item,
+        getNextCode: _getNextCode,
+        onProcessed: (newSplit) {
+          setState(() => _splitStocks.insert(0, newSplit));
+          _saveData();
+          _tabController.animateTo(1);
+        },
+      ),
+      emptyMessage: '表示する丸材ストックがありません',
     );
   }
 
   Widget _buildSplitStockTab() {
-    List<SplitCaneStock> items = _showOnlyInStock ? _splitStocks.where((e) => e.remainingCount > 0).toList() : List.from(_splitStocks);
-    // items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
-    items.sort((a, b) => b.id.compareTo(a.id));
-
-    if (items.isEmpty) return const Center(child: Text('表示する半カマボコストックがありません'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final item = items[i];
-        return _buildStockCard(
-          title: item.displayTitle,
-          subtitle: '太さ: ${item.diameter} | 由来: ${item.sourceInfo}\nメモ: ${item.memo ?? "-"}',
-          count: item.remainingCount,
-          onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
-          onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
-          onEdit: () => StockDialogs.showEditSplitDialog(context: context, split: item, existingBrands: _getAllExistingBrands(), onSaved: () { setState(() {}); _saveData(); }),
-          onDelete: () => _confirmDelete(() { setState(() => _splitStocks.remove(item)); _saveData(); }),
-          processButton: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
-            icon: const Icon(Icons.density_medium, size: 16),
-            label: const Text('カマボコ(G)へ加工'),
-            onPressed: () => StockDialogs.showProcessSplitToGougedDialog(
-              context: context,
-              split: item,
-              getNextCode: _getNextCode,
-              onProcessed: (newGouged) {
-                setState(() => _gougedStocks.add(newGouged));
-                _saveData();
-                _tabController.animateTo(2);
-              },
-            ),
-          ),
-        );
-      },
+    return _buildCaneStockTab<SplitCaneStock>(
+      items: _splitStocks,
+      getCode: (e) => e.id,
+      getDisplayTitle: (e) => e.displayTitle,
+      getId: (e) => e.id,
+      getSubtitle: (e) => '太さ: ${e.diameter} | 購入先: ${e.vendor ?? "未登録"}\nメモ: ${e.memo ?? "-"}',
+      getCount: (e) => e.remainingCount,
+      setCount: (e, val) => e.remainingCount = val,
+      onAddStock: () {},
+      onDelete: (item) => () => _confirmDelete(() { setState(() => _splitStocks.remove(item)); _saveData(); }),
+      processButtonLabel: 'カマボコ(G)へ加工',
+      processButtonIcon: Icons.density_medium,
+      onProcess: (item) => () => StockDialogs.showProcessSplitToGougedDialog(
+        context: context,
+        split: item,
+        getNextCode: _getNextCode,
+        onProcessed: (newGouged) {
+          setState(() => _gougedStocks.add(newGouged));
+          _saveData();
+          _tabController.animateTo(2);
+        },
+      ),
+      emptyMessage: '表示する半カマボコストックがありません',
     );
   }
 
   Widget _buildGougedStockTab() {
-    List<GougedCaneStock> items = _showOnlyInStock ? _gougedStocks.where((e) => e.remainingCount > 0).toList() : List.from(_gougedStocks);
-    items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
-
-    if (items.isEmpty) return const Center(child: Text('表示するカマボコストックがありません'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final item = items[i];
-        return _buildStockCard(
-          title: item.displayTitle,
-          subtitle: '太さ: ${item.diameter} | マシン: ${item.machine} | 日付: ${item.gougingDate}\nメモ: ${item.memo ?? "-"}',
-          count: item.remainingCount,
-          onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
-          onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
-          onEdit: () => StockDialogs.showEditGougedDialog(context: context, gouged: item, onSaved: () { setState(() {}); _saveData(); }),
-          onDelete: () => _confirmDelete(() { setState(() => _gougedStocks.remove(item)); _saveData(); }),
-          processButton: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
-            icon: const Icon(Icons.content_cut, size: 16),
-            label: const Text('舟形(S)へ加工'),
-            onPressed: () => StockDialogs.showProcessGougedToShapedDialog(
-              context: context,
-              gouged: item,
-              getNextCode: _getNextCode,
-              onProcessed: (newShaped) {
-                setState(() => _shapedStocks.add(newShaped));
-                _saveData();
-                _tabController.animateTo(3);
-              },
-            ),
-          ),
-        );
-      },
+    return _buildCaneStockTab<GougedCaneStock>(
+      items: _gougedStocks,
+      getCode: (e) => e.code,
+      getDisplayTitle: (e) => e.displayTitle,
+      getId: (e) => e.id,
+      getSubtitle: (e) => '太さ: ${e.diameter} | マシン: ${e.machine} | 厚さ ${e.thickness} | 購入先: ${e.vendor ?? "未登録"}\n日付: ${e.gougingDate} | メモ: ${e.memo ?? "-"}',
+      getCount: (e) => e.remainingCount,
+      setCount: (e, val) => e.remainingCount = val,
+      onAddStock: () {},
+      onDelete: (item) => () => _confirmDelete(() { setState(() => _gougedStocks.remove(item)); _saveData(); }),
+      processButtonLabel: '舟形(S)へ加工',
+      processButtonIcon: Icons.content_cut,
+      onProcess: (item) => () => StockDialogs.showProcessGougedToShapedDialog(
+        context: context,
+        gouged: item,
+        getNextCode: _getNextCode,
+        onProcessed: (newShaped) {
+          setState(() => _shapedStocks.add(newShaped));
+          _saveData();
+          _tabController.animateTo(3);
+        },
+      ),
+      emptyMessage: '表示するカマボコストックがありません',
     );
   }
 
   Widget _buildShapedStockTab() {
-    List<ShapedCaneStock> items = _showOnlyInStock ? _shapedStocks.where((e) => e.remainingCount > 0).toList() : List.from(_shapedStocks);
-    items.sort((a, b) => b.code.compareTo(a.code)); // 降順ソート
-
-    if (items.isEmpty) return const Center(child: Text('表示する舟形ストックがありません'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final item = items[i];
-        return _buildStockCard(
-          title: item.displayTitle,
-          subtitle: '太さ: ${item.diameter} | シェーパー: ${item.shaper} | 日付: ${item.shapingDate}\nメモ: ${item.memo ?? "-"}',
-          count: item.remainingCount,
-          onIncrement: () { setState(() => item.remainingCount++); _saveData(); },
-          onDecrement: () { setState(() => item.remainingCount--); _saveData(); },
-          onEdit: () => StockDialogs.showEditShapedDialog(context: context, shaped: item, onSaved: () { setState(() {}); _saveData(); }),
-          onDelete: () => _confirmDelete(() { setState(() => _shapedStocks.remove(item)); _saveData(); }),
-          processButton: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
-            icon: const Icon(Icons.architecture, size: 16),
-            label: const Text('チューブを選んで糸巻き'),
-            onPressed: () {
-              final availableStaples = stapleStocks.where((s) => s.status == StapleStatus.unused).toList();
-              StockDialogs.showProcessShapedToTiedDialog(
-                context: context,
-                shaped: item,
-                availableStaples: availableStaples,
-                onProcessed: (newTied, selectedStaple) {
-                  setState(() {
-                    _tiedStocks.add(newTied);
-                    item.remainingCount--;
-                    selectedStaple.status = StapleStatus.tied;
-                  });
-                  _saveData();
-                  _tabController.animateTo(5);
-                },
-              );
-            },
-          ),
+    return _buildCaneStockTab<ShapedCaneStock>(
+      items: _shapedStocks,
+      getCode: (e) => e.code,
+      getDisplayTitle: (e) => e.displayTitle,
+      getId: (e) => e.id,
+      getSubtitle: (e) => '太さ: ${e.diameter} | シェーパー: ${e.shaper} | 購入先: ${e.vendor ?? "未登録"}\n日付: ${e.shapingDate} | メモ: ${e.memo ?? "-"}',
+      getCount: (e) => e.remainingCount,
+      setCount: (e, val) => e.remainingCount = val,
+      onAddStock: () {},
+      onDelete: (item) => () => _confirmDelete(() { setState(() => _shapedStocks.remove(item)); _saveData(); }),
+      processButtonLabel: 'チューブを選んで糸巻き',
+      processButtonIcon: Icons.architecture,
+      onProcess: (item) => () {
+        final availableStaples = stapleStocks.where((s) => s.status == StapleStatus.unused).toList();
+        StockDialogs.showProcessShapedToTiedDialog(
+          context: context,
+          shaped: item,
+          availableStaples: availableStaples,
+          onProcessed: (newTied, selectedStaple) {
+            setState(() {
+              _tiedStocks.add(newTied);
+              item.remainingCount--;
+              selectedStaple.status = StapleStatus.tied;
+            });
+            _saveData();
+            _tabController.animateTo(5);
+          },
         );
       },
+      emptyMessage: '表示する舟形ストックがありません',
     );
   }
 
   Widget _buildStapleStockTab() {
     final sortedList = getSortedStaples();
     final items = _showOnlyInStock ? sortedList.where((e) => e.status == StapleStatus.unused).toList() : sortedList;
-    if (items.isEmpty) return const Center(child: Text('表示するチューブ(Staple)ストックがありません'));
+    if (items.isEmpty) return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
       itemCount: items.length,
@@ -611,7 +735,28 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Expanded(child: RichText(text: TextSpan(style: const TextStyle(color: Colors.black, fontSize: 16), children: [TextSpan(text: '[${item.brand} ${item.model}] ${item.length}  ', style: TextStyle(color: Colors.grey.shade700)), TextSpan(text: item.mark, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange))]))),
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              style: const TextStyle(color: Colors.black, fontSize: 16),
+                              children: [
+                                TextSpan(text: '[${item.brand} ${item.model}] ${item.length}  ', style: TextStyle(color: Colors.grey.shade700)),
+                                TextSpan(text: item.mark, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange)),
+                              ],
+                            ),
+                          ),
+                          if (item.id.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Text('(', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                            ReedIdUtils.buildClickableIdParts(context, item.id, _tabController),
+                            Text(')', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                          ],
+                        ],
+                      ),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -636,7 +781,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   Widget _buildTiedStockTab() {
     List<TiedStock> items = List.from(_tiedStocks);
-    items.sort((a, b) => b.id.compareTo(a.id)); // 新しいもの（IDが大きい順）を上に
+    items.sort((a, b) => b.id.compareTo(a.id));
 
     if (items.isEmpty) return const Center(child: Text('糸巻き(Tied)されたリードがありません'));
     return ListView.builder(
@@ -661,7 +806,18 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('[${staple.displayTitle}]', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.deepOrange)),
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text('[チューブ: ${staple.displayTitle}]', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange)),
+                          const SizedBox(width: 8),
+                          Text('(', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                          ReedIdUtils.buildClickableIdParts(context, item.stapleId, _tabController),
+                          Text(')', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -680,7 +836,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                   ],
                 ),
                 const Divider(height: 16),
-                Text('ケーン: ${item.shapedTitle} (${item.shapedCode})'),
+                // ★ 舟形ケーンの情報とクリック可能なIDパーツを両方表示
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text('ケーン: ${item.shapedTitle}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                    ReedIdUtils.buildClickableIdParts(context, item.shapedCode, _tabController),
+                    const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                  ],
+                ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
@@ -697,6 +862,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                       ),
                       const SizedBox(width: 4),
                       Text('${item.threadColor}'),
+                    ],
+                    if (item.vendor != null && item.vendor!.isNotEmpty) ...[
+                      Text(' | 購入先: ${item.vendor}'),
                     ],
                   ],
                 ),

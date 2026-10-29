@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import '../utils/helpers.dart';
+import '../utils/reed_id_utils.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
   const AdjustmentWorkPage({super.key});
@@ -67,7 +68,23 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('リードの分解とチューブ回収'),
-        content: Text('[チューブ: ${reed.stapleId}] ${reed.shapedTitle}\n\nこのリードを分解しますか？\n※チューブは素材ストックの「未使用」に自動で戻り、このリードは一覧から削除されます。'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Text('[チューブ: '),
+                ReedIdUtils.buildClickableIdParts(context, reed.stapleId, null),
+                const Text('] '),
+                Text(reed.shapedTitle),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const Text('このリードを分解しますか？\n※チューブは素材ストックの「未使用」に自動で戻り、このリードは一覧から削除されます。'),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -94,7 +111,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('リードの削除'),
-        content: Text('[${reed.stapleId}] ${reed.shapedTitle}\n\nこのリードを一覧から完全に削除しますか？'),
+        content: Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            const Text('['),
+            ReedIdUtils.buildClickableIdParts(context, reed.stapleId, null),
+            Text('] ${reed.shapedTitle}\n\nこのリードを一覧から完全に削除しますか？'),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -882,9 +906,20 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Text(
-                        '${reed.shapedTitle}',
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            reed.shapedTitle,
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          ),
+                          if (reed.id.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                            ReedIdUtils.buildClickableIdParts(context, reed.id, null),
+                            const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                          ],
+                        ],
                       ),
                     ),
                     Row(
@@ -949,9 +984,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                   ],
                 ),
                 const SizedBox(height: 8),
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    Text('コード: ${reed.shapedCode}  /  登録日: ${reed.tiedDate}'),
+                    const Text('コード: '),
+                    ReedIdUtils.buildClickableIdParts(context, reed.shapedCode, null),
+                    Text('  /  登録日: ${reed.tiedDate}'),
                     if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
                       const Text('  /  糸: '),
                       Container(
