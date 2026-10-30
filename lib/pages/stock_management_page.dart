@@ -716,69 +716,120 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildStapleStockTab() {
-    final sortedList = getSortedStaples();
-    final items = _showOnlyInStock ? sortedList.where((e) => e.status == StapleStatus.unused).toList() : sortedList;
-    if (items.isEmpty) return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final item = items[i];
-        final bool isUnused = item.status == StapleStatus.unused;
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: Colors.black, fontSize: 16),
-                              children: [
-                                TextSpan(text: '[${item.brand} ${item.model}] ${item.length}  ', style: TextStyle(color: Colors.grey.shade700)),
-                                TextSpan(text: item.mark, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange)),
-                              ],
-                            ),
-                          ),
-                          if (item.id.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Text(
-                              '(ID: ${item.id})',
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                            ) 
-                          ],
-                        ],
-                      ),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
+  final sortedList = getSortedStaples();
+  final items = _showOnlyInStock 
+      ? sortedList.where((e) => e.status == StapleStatus.unused).toList() 
+      : sortedList;
+      
+  if (items.isEmpty) {
+    return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
+  }
+  
+  return ListView.builder(
+    padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+    itemCount: items.length,
+    itemBuilder: (context, i) {
+      final item = items[i];
+      final bool isUnused = item.status == StapleStatus.unused;
+      
+      return Card(
+        margin: const EdgeInsets.only(bottom: 12),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          // 1つの Column で全体をラップ
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ブランド、マーク、材質、メモ、そして右側のボタン類をすべて「1段」にまとめた Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // 【左側エリア】ブランド名・マーク・材質・メモをまとめた Wrap
+                  Expanded(
+                    child: Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 12,   // 要素同士の横の隙間
+                      runSpacing: 4, // 万が一折り返されたときの縦の隙間
                       children: [
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: isUnused ? Colors.green.shade100 : Colors.orange.shade100, borderRadius: BorderRadius.circular(4)), child: Text(item.status.label, style: TextStyle(fontSize: 12, color: isUnused ? Colors.green.shade900 : Colors.orange.shade900, fontWeight: FontWeight.bold))),
-                        IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey), tooltip: '編集', onPressed: () => StockDialogs.showEditStapleDialog(context: context, staple: item, existingBrands: _getAllExistingBrands(), onSaved: () { setState(() {}); _saveData(); })),
-                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), tooltip: '削除', onPressed: () => _confirmDelete(() { setState(() => stapleStocks.remove(item)); _saveData(); })),
+                        // 1. ブランド・モデル・長さ・マーク
+                        RichText(
+                          text: TextSpan(
+                            style: const TextStyle(color: Colors.black, fontSize: 16),
+                            children: [
+                              TextSpan(
+                                text: '${item.brand} ${item.model} ${item.length}mm ', 
+                                style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
+                              ),
+                              TextSpan(
+                                text: item.mark, 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        // 2. 材質とメモ（横に続けてスッキリ配置）
+                        Text(
+                          '材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}',
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        ),
                       ],
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                Text('材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}', style: TextStyle(color: Colors.grey.shade700, fontSize: 14)),
-              ],
-            ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // 【右側エリア】ステータスバッジ、編集・削除ボタン
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: isUnused ? Colors.green.shade100 : Colors.orange.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          item.status.label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isUnused ? Colors.green.shade900 : Colors.orange.shade900,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                        tooltip: '編集',
+                        onPressed: () => StockDialogs.showEditStapleDialog(
+                          context: context,
+                          staple: item,
+                          existingBrands: _getAllExistingBrands(),
+                          onSaved: () {
+                            setState(() {});
+                            _saveData();
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                        tooltip: '削除',
+                        onPressed: () => _confirmDelete(() {
+                          setState(() => stapleStocks.remove(item));
+                          _saveData();
+                        }),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildTiedStockTab() {
     List<TiedStock> items = List.from(_tiedStocks);
