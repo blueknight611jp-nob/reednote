@@ -89,9 +89,9 @@ class StockDialogs {
 
     final frequentBrands = _getFrequentOptions(existingBrands);
     final frequentVendors = _getFrequentOptions(existingVendors);
-    final frequentDiameters = _getFrequentOptions(['10-10.5', '10.5-11', '9.5-10', '10']);
-    final frequentShapers = _getFrequentOptions(['H39', 'H69', 'H25', 'Chiarugi 2']);
-    final frequentThicks = _getFrequentOptions(['0.58', '0.59', '0.60', '0.57']);
+    final frequentDiameters = _getFrequentOptions(['10-10.5','9.5-10', '10', '10.5-11']);
+    final frequentShapers = _getFrequentOptions(['H39', 'H69', 'H25']);
+    final frequentThicks = _getFrequentOptions(['0.58', '0.57', '0.56','0.59']);
 
     String title;
     String typeLetter;
@@ -646,7 +646,15 @@ class StockDialogs {
   }) {
     StapleStock? selectedStaple = availableStaples.isNotEmpty ? availableStaples.first : null;
     final lengthController = TextEditingController(text: '73.0');
-    final colorController = TextEditingController(text: '赤');
+    
+    // 糸の色の選択肢と初期値（黒・紫・青・緑・黄・橙・桃・赤）
+    final List<String> threadColors = ['黒', '紫', '青', '緑', '黄', '橙', '桃', '赤'];
+    String selectedColor = '赤';
+
+    // ▼ 糸の種類（ナイロン・ポリエステル・絹、デフォルト：ナイロン）
+    final List<String> threadMaterials = ['ナイロン', 'ポリエステル', '絹'];
+    String selectedMaterial = 'ナイロン';
+    
     final memoController = TextEditingController();
 
     showDialog(
@@ -670,8 +678,39 @@ class StockDialogs {
                     items: availableStaples.map((st) => DropdownMenuItem(value: st, child: Text('[${st.brand} ${st.model}] ${st.length} (${st.mark})'))).toList(),
                     onChanged: (val) => setState(() => selectedStaple = val),
                   ),
+                const SizedBox(height: 8),
                 TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
-                TextField(controller: colorController, decoration: const InputDecoration(labelText: '糸の色')),
+                const SizedBox(height: 8),
+                
+                // 糸の色選択ドロップダウン
+                DropdownButtonFormField<String>(
+                  value: selectedColor,
+                  decoration: const InputDecoration(labelText: '糸の色'),
+                  items: threadColors.map((color) {
+                    return DropdownMenuItem(
+                      value: color,
+                      child: Text(color),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => selectedColor = val);
+                    }
+                  },
+                ),
+
+                const SizedBox(height: 8),
+
+                // ▼ 糸の種類選択（新規追加）
+                DropdownButtonFormField<String>(
+                  value: selectedMaterial,
+                  decoration: const InputDecoration(labelText: '糸の種類'),
+                  items: threadMaterials.map((mat) => DropdownMenuItem(value: mat, child: Text(mat))).toList(),
+                  onChanged: (val) { if (val != null) setState(() => selectedMaterial = val); },
+                ),
+                
+                const SizedBox(height: 8),
+
                 TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
               ],
             ),
@@ -692,13 +731,102 @@ class StockDialogs {
                   shapedTitle: shaped.displayTitle,
                   tiedDate: DateTime.now().toString().split(' ')[0],
                   totalLength: double.tryParse(lengthController.text) ?? 73.0,
-                  threadColor: colorController.text.trim(),
-                  vendor: shaped.vendor, // 舟形の購入先を糸巻きストックへ引き継ぐ
+                  threadColor: selectedColor, // 選択された変数を指定
+                  vendor: shaped.vendor,
                   memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
                 );
                 onProcessed(tied, selectedStaple!);
               },
               child: const Text('糸巻き完了'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// 糸巻きストック (TiedStock) 編集・複製ダイアログ
+  static void showEditTiedDialog({
+    required BuildContext context,
+    required TiedStock tied,
+    bool isCopy = false, // true の場合は新規 ID を発行して複製
+    required Function(TiedStock) onSaved,
+  }) {
+    final lengthController = TextEditingController(text: tied.totalLength.toString());
+    final List<String> threadColors = ['黒', '紫', '青', '緑', '黄', '橙', '桃', '赤'];
+    String selectedColor = threadColors.contains(tied.threadColor) ? tied.threadColor! : '赤';
+
+    final List<String> threadMaterials = ['ナイロン', 'ポリエステル', '絹'];
+    String selectedMaterial = threadMaterials.contains(tied.threadMaterial) ? tied.threadMaterial! : 'ナイロン';
+
+    final memoController = TextEditingController(text: tied.memo ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(isCopy ? '糸巻きストックを複製' : '糸巻きストックを編集'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('ケーン: ${tied.shapedTitle}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 12),
+                TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedColor,
+                  decoration: const InputDecoration(labelText: '糸の色'),
+                  items: threadColors.map((color) => DropdownMenuItem(value: color, child: Text(color))).toList(),
+                  onChanged: (val) { if (val != null) setState(() => selectedColor = val); },
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: selectedMaterial,
+                  decoration: const InputDecoration(labelText: '糸の種類'),
+                  items: threadMaterials.map((mat) => DropdownMenuItem(value: mat, child: Text(mat))).toList(),
+                  onChanged: (val) { if (val != null) setState(() => selectedMaterial = val); },
+                ),
+                const SizedBox(height: 8),
+                TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+
+                final newLength = double.tryParse(lengthController.text) ?? tied.totalLength;
+                final newMemo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
+                if (isCopy) {
+                  // 複製の処理：タイムスタンプを付与して新しいIDを発行
+                  final copiedTied = TiedStock(
+                    id: '${tied.id}_copy_${DateTime.now().millisecondsSinceEpoch}',
+                    stapleId: tied.stapleId,
+                    shapedCode: tied.shapedCode,
+                    shapedTitle: tied.shapedTitle,
+                    tiedDate: DateTime.now().toString().split(' ')[0], // 複製日を本日に設定
+                    totalLength: newLength,
+                    threadColor: selectedColor,
+                    threadMaterial: selectedMaterial,
+                    vendor: tied.vendor,
+                    memo: newMemo,
+                  );
+                  onSaved(copiedTied);
+                } else {
+                  // 編集の処理：既存のインスタンスを更新
+                  tied.totalLength = newLength;
+                  tied.threadColor = selectedColor;
+                  tied.threadMaterial = selectedMaterial;
+                  tied.memo = newMemo;
+                  onSaved(tied);
+                }
+              },
+              child: Text(isCopy ? '複製して追加' : '保存'),
             ),
           ],
         ),

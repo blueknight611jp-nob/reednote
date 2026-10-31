@@ -309,6 +309,7 @@ class TiedStock {
   String tiedDate;
   double totalLength;
   String? threadColor;
+  String? threadMaterial;
   String? vendor;
   String? memo;
 
@@ -320,6 +321,7 @@ class TiedStock {
     required this.tiedDate,
     required this.totalLength,
     this.threadColor,
+    this.threadMaterial,
     this.vendor,
     this.memo,
   });
@@ -332,6 +334,7 @@ class TiedStock {
         'tiedDate': tiedDate,
         'totalLength': totalLength,
         'threadColor': threadColor,
+        'threadMaterial': threadMaterial,
         'vendor': vendor,
         'memo': memo,
       };
@@ -345,6 +348,7 @@ class TiedStock {
       tiedDate: json['tiedDate'] ?? '',
       totalLength: (json['totalLength'] as num?)?.toDouble() ?? 73.0,
       threadColor: json['threadColor'],
+      threadMaterial: json['threadMaterial'],
       vendor: json['vendor'],
       memo: json['memo'],
     );
@@ -420,6 +424,7 @@ class WorkReed {
   String currentTotalLength;
   int qualityLevel;
   String? threadColor;
+  String? threadMaterial;
   String? vendor;
   List<String> photosBase64;
   List<WorkReedLog> logs;
@@ -433,6 +438,7 @@ class WorkReed {
     required this.currentTotalLength,
     required this.qualityLevel,
     this.threadColor,
+    this.threadMaterial,
     this.vendor,
     List<String>? photosBase64,
     required this.logs,
@@ -447,6 +453,7 @@ class WorkReed {
         'currentTotalLength': currentTotalLength,
         'qualityLevel': qualityLevel,
         'threadColor': threadColor,
+        'threadMaterial': threadMaterial,
         'vendor': vendor,
         'photosBase64': photosBase64,
         'logs': logs.map((e) => e.toJson()).toList(),
@@ -462,6 +469,7 @@ class WorkReed {
       currentTotalLength: json['currentTotalLength'] ?? '73.0',
       qualityLevel: json['qualityLevel'] ?? 1,
       threadColor: json['threadColor'],
+      threadMaterial: json['threadMaterial'],
       vendor: json['vendor'],
       photosBase64: json['photosBase64'] != null ? List<String>.from(json['photosBase64']) : [],
       logs: (json['logs'] as List?)?.map((e) => WorkReedLog.fromJson(e)).toList() ?? [],

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:html' as html;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +30,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   List<TiedStock> _tiedStocks = [];
   Set<String> _workingReedIds = {};
 
+  String? _highlightedId; // 現在ハイライトされているアイテムのID
+  Timer? _highlightTimer;   // ハイライトを消すためのタイマー
+
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
     list.sort((a, b) {
@@ -54,6 +58,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   @override
   void dispose() {
     _tabController.dispose();
+    _highlightTimer?.cancel();
     super.dispose();
   }
 
@@ -102,6 +107,22 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     await prefs.setString('shaped_stocks', jsonEncode(_shapedStocks.map((e) => e.toJson()).toList()));
     await prefs.setString('staple_stocks', jsonEncode(stapleStocks.map((e) => e.toJson()).toList()));
     await prefs.setString('tied_stocks', jsonEncode(_tiedStocks.map((e) => e.toJson()).toList()));
+  }
+
+  void _jumpAndHighlight(int tabIndex, String targetId) {
+    _highlightTimer?.cancel();
+    setState(() {
+      _highlightedId = targetId;
+      _tabController.animateTo(tabIndex);
+    });
+
+    _highlightTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _highlightedId = null;
+        });
+      }
+    });
   }
 
   void _confirmAndSendToCutAndScrape(TiedStock tied) {
@@ -432,11 +453,15 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     required VoidCallback onEdit,
     required VoidCallback onDelete,
     Widget? processButton,
+    bool isHighlighted = false,
   }) {
     final bool isInStock = count > 0;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: isInStock ? null : Colors.grey.shade200,
+      color: isHighlighted
+          ? Colors.amber.shade100
+          : (isInStock ? null : Colors.grey.shade200),
+      elevation: isHighlighted ? 6 : 1,
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -464,8 +489,12 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                           color: isInStock ? Colors.black54 : Colors.grey.shade600,
                         ),
                       ),
-                      // IDパーツをインタラクティブに生成（クリックで該当タブへジャンプ）
-                      ReedIdUtils.buildClickableIdParts(context, fullId, _tabController),
+                      ReedIdUtils.buildClickableIdParts(
+                        context,
+                        fullId,
+                        _tabController,
+                        onJumpAndHighlight: _jumpAndHighlight,
+                      ),
                       Text(
                         ')',
                         style: TextStyle(
@@ -538,9 +567,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     );
   }
 
-  // =========================================================================
-  // ★ 4つのタブを統合した汎用ケーンタブ描画メソッド（共通化部分）
-  // =========================================================================
   Widget _buildCaneStockTab<T>({
     required List<T> items,
     required String Function(T) getCode,
@@ -570,12 +596,15 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       itemBuilder: (context, i) {
         final item = filteredItems[i];
         final count = getCount(item);
+        final itemId = getId(item);
+        final bool isHighlighted = _highlightedId != null && itemId.contains(_highlightedId!);
 
         return _buildStockCard(
           displayTitle: getDisplayTitle(item),
-          fullId: getId(item),
+          fullId: itemId,
           subtitle: getSubtitle(item),
           count: count,
+          isHighlighted: isHighlighted,
           onIncrement: () { setState(() => setCount(item, count + 1)); _saveData(); },
           onDecrement: () { setState(() => setCount(item, count - 1)); _saveData(); },
           onEdit: () => StockDialogs.showEditCaneDialog(
@@ -597,9 +626,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     );
   }
 
-  // =========================================================================
-  // 各タブの呼び出し定義
-  // =========================================================================
   Widget _buildTubeStockTab() {
     return _buildCaneStockTab<TubeStock>(
       items: _tubeStocks,
@@ -695,7 +721,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       processButtonLabel: 'チューブを選んで糸巻き',
       processButtonIcon: Icons.architecture,
       onProcess: (item) => () {
-        final availableStaples = stapleStocks.where((s) => s.status == StapleStatus.unused).toList();
+        final availableStaples = getSortedStaples().where((s) => s.status == StapleStatus.unused).toList();
         StockDialogs.showProcessShapedToTiedDialog(
           context: context,
           shaped: item,
@@ -716,120 +742,114 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildStapleStockTab() {
-  final sortedList = getSortedStaples();
-  final items = _showOnlyInStock 
-      ? sortedList.where((e) => e.status == StapleStatus.unused).toList() 
-      : sortedList;
+    final sortedList = getSortedStaples();
+    final items = _showOnlyInStock 
+        ? sortedList.where((e) => e.status == StapleStatus.unused).toList() 
+        : sortedList;
       
-  if (items.isEmpty) {
-    return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
-  }
+    if (items.isEmpty) {
+      return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
+    }
   
-  return ListView.builder(
-    padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-    itemCount: items.length,
-    itemBuilder: (context, i) {
-      final item = items[i];
-      final bool isUnused = item.status == StapleStatus.unused;
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+      itemCount: items.length,
+      itemBuilder: (context, i) {
+        final item = items[i];
+        final bool isUnused = item.status == StapleStatus.unused;
+        final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
       
-      return Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          // 1つの Column で全体をラップ
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ブランド、マーク、材質、メモ、そして右側のボタン類をすべて「1段」にまとめた Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // 【左側エリア】ブランド名・マーク・材質・メモをまとめた Wrap
-                  Expanded(
-                    child: Wrap(
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 12,   // 要素同士の横の隙間
-                      runSpacing: 4, // 万が一折り返されたときの縦の隙間
+        return Card(
+          margin: const EdgeInsets.only(bottom: 12),
+          color: isHighlighted ? Colors.amber.shade100 : null,
+          elevation: isHighlighted ? 6 : 1,
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 4,
+                        children: [
+                          RichText(
+                            text: TextSpan(
+                              style: const TextStyle(color: Colors.black, fontSize: 16),
+                              children: [
+                                TextSpan(
+                                  text: '${item.brand} ${item.model} ${item.length} ', 
+                                  style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
+                                ),
+                                TextSpan(
+                                  text: item.mark, 
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            '材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}',
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        // 1. ブランド・モデル・長さ・マーク
-                        RichText(
-                          text: TextSpan(
-                            style: const TextStyle(color: Colors.black, fontSize: 16),
-                            children: [
-                              TextSpan(
-                                text: '${item.brand} ${item.model} ${item.length}mm ', 
-                                style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
-                              ),
-                              TextSpan(
-                                text: item.mark, 
-                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange),
-                              ),
-                            ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: isUnused ? Colors.green.shade100 : Colors.orange.shade100,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            item.status.label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isUnused ? Colors.green.shade900 : Colors.orange.shade900,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
-                        
-                        // 2. 材質とメモ（横に続けてスッキリ配置）
-                        Text(
-                          '材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}',
-                          style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                          tooltip: '編集',
+                          onPressed: () => StockDialogs.showEditStapleDialog(
+                            context: context,
+                            staple: item,
+                            existingBrands: _getAllExistingBrands(),
+                            onSaved: () {
+                              setState(() {});
+                              _saveData();
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                          tooltip: '削除',
+                          onPressed: () => _confirmDelete(() {
+                            setState(() => stapleStocks.remove(item));
+                            _saveData();
+                          }),
                         ),
                       ],
                     ),
-                  ),
-
-                  const SizedBox(width: 8),
-
-                  // 【右側エリア】ステータスバッジ、編集・削除ボタン
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: isUnused ? Colors.green.shade100 : Colors.orange.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          item.status.label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isUnused ? Colors.green.shade900 : Colors.orange.shade900,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
-                        tooltip: '編集',
-                        onPressed: () => StockDialogs.showEditStapleDialog(
-                          context: context,
-                          staple: item,
-                          existingBrands: _getAllExistingBrands(),
-                          onSaved: () {
-                            setState(() {});
-                            _saveData();
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        tooltip: '削除',
-                        onPressed: () => _confirmDelete(() {
-                          setState(() => stapleStocks.remove(item));
-                          _saveData();
-                        }),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    },
-  );
-}
+        );
+      },
+    );
+  }
 
   Widget _buildTiedStockTab() {
     List<TiedStock> items = List.from(_tiedStocks);
@@ -842,6 +862,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       itemBuilder: (context, i) {
         final item = items[i];
         final bool isWorking = _workingReedIds.contains(item.id);
+        final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
 
         final staple = stapleStocks.firstWhere(
           (s) => s.id == item.stapleId,
@@ -850,31 +871,66 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
         return Card(
           margin: const EdgeInsets.only(bottom: 12),
+          color: isHighlighted ? Colors.amber.shade100 : null,
+          elevation: isHighlighted ? 6 : 1,
           child: Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1段目：チューブ情報（ブランド・モデル・長さのみ） ＋ コピー・編集・削除ボタン
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text('[チューブ: ${staple.displayTitle}]', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange)),
-                          const SizedBox(width: 8),
-                          Text('(', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                          ReedIdUtils.buildClickableIdParts(context, item.stapleId, _tabController),
-                          Text(')', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
-                        ],
+                      child: Text(
+                        'チューブ: ${staple.brand}${staple.model}${staple.length}${staple.mark}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: Colors.deepOrange,
+                        ),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('全長: ${item.totalLength} mm', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        const SizedBox(width: 8),
+                        // コピーボタン
+                        IconButton(
+                          icon: const Icon(Icons.copy_outlined, color: Colors.blueGrey),
+                          tooltip: '糸巻きストックを複製',
+                          onPressed: () {
+                            StockDialogs.showEditTiedDialog(
+                              context: context,
+                              tied: item,
+                              isCopy: true,
+                              onSaved: (copiedTied) {
+                                setState(() {
+                                  _tiedStocks.insert(0, copiedTied);
+                                });
+                                _saveData();
+                              },
+                            );
+                          },
+                        ),
+                        // 編集ボタン
+                        IconButton(
+                          icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                          tooltip: '糸巻きストックを編集',
+                          onPressed: () {
+                            StockDialogs.showEditTiedDialog(
+                              context: context,
+                              tied: item,
+                              isCopy: false,
+                              onSaved: (_) {
+                                setState(() {});
+                                _saveData();
+                              },
+                            );
+                          },
+                        ),
+                        // 削除ボタン
                         IconButton(
                           icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                           tooltip: '糸巻きストックを削除',
@@ -888,22 +944,33 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                   ],
                 ),
                 const Divider(height: 16),
-                // ★ 舟形ケーンの情報とクリック可能なIDパーツを両方表示
+                
+                // 2段目：ケーン情報
                 Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text('ケーン: ${item.shapedTitle}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
                     const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                    ReedIdUtils.buildClickableIdParts(context, item.shapedCode, _tabController),
+                    ReedIdUtils.buildClickableIdParts(
+                      context,
+                      item.shapedCode,
+                      _tabController,
+                      onJumpAndHighlight: _jumpAndHighlight,
+                    ),
                     const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
                   ],
                 ),
                 const SizedBox(height: 6),
-                Row(
+                
+                // 3段目：糸巻き情報（糸巻き日・糸の色・糸の種類・全長を同レベルで表示）
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
                     Text('糸巻き日: ${item.tiedDate}'),
                     if (item.threadColor != null && item.threadColor!.isNotEmpty) ...[
-                      const Text(' | 糸: '),
+                      const Text('| 糸:'),
                       Container(
                         width: 12,
                         height: 12,
@@ -912,19 +979,24 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                           shape: BoxShape.circle,
                         ),
                       ),
-                      const SizedBox(width: 4),
                       Text('${item.threadColor}'),
                     ],
+                    Text('| 種類: ${item.threadMaterial ?? "ナイロン"}'),
+                    Text('| 全長: ${item.totalLength} mm'),
                     if (item.vendor != null && item.vendor!.isNotEmpty) ...[
-                      Text(' | 購入先: ${item.vendor}'),
+                      Text('| 購入先: ${item.vendor}'),
                     ],
                   ],
                 ),
+                
+                // 4段目：メモ
                 if (item.memo != null && item.memo!.isNotEmpty) ...[
                   const SizedBox(height: 4),
                   Text('メモ: ${item.memo}', style: TextStyle(color: Colors.grey.shade700)),
                 ],
                 const SizedBox(height: 12),
+                
+                // 5段目：アクションボタン
                 Align(
                   alignment: Alignment.centerRight,
                   child: isWorking

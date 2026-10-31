@@ -5,8 +5,9 @@ class ReedIdUtils {
   static Widget buildClickableIdParts(
     BuildContext context,
     String fullId,
-    TabController? tabController,
-  ) {
+    TabController? tabController, {
+    Function(int tabIndex, String targetId)? onJumpAndHighlight, // 追加
+  }) {
     // カッコや余分な文字を取り除き、ハイフンで分割
     final cleanId = fullId.replaceAll(RegExp(r'[()]'), '');
     final parts = cleanId.split('-');
@@ -16,7 +17,12 @@ class ReedIdUtils {
       runSpacing: 2,
       children: parts.map((part) {
         return InkWell(
-          onTap: () => handleIdPartTap(context, part, tabController),
+          onTap: () => handleIdPartTap(
+            context, 
+            part, 
+            tabController, 
+            onJumpAndHighlight: onJumpAndHighlight, // 渡す
+          ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
             child: Text(
@@ -38,8 +44,9 @@ class ReedIdUtils {
   static void handleIdPartTap(
     BuildContext context,
     String part,
-    TabController? tabController,
-  ) {
+    TabController? tabController, {
+    Function(int tabIndex, String targetId)? onJumpAndHighlight, // 追加
+  }) {
     int targetIndex = -1;
     String targetTabName = '';
 
@@ -60,12 +67,17 @@ class ReedIdUtils {
       targetIndex = 4; // 5. チューブ(Hülse)
       targetTabName = 'チューブ(Staple)';
     } else if (part.startsWith('W')) {
-      // ワークリード等の場合（必要に応じてタブインデックスを調整）
       targetTabName = 'ワークリード';
     }
 
     if (targetIndex != -1 && tabController != null) {
-      tabController.animateTo(targetIndex);
+      // ハイライト付きジャンプが指定されていればそれを実行、なければ通常のタブ移動
+      if (onJumpAndHighlight != null) {
+        onJumpAndHighlight(targetIndex, part);
+      } else {
+        tabController.animateTo(targetIndex);
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('「$part」から $targetTabName タブへ移動しました'),
