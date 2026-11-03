@@ -896,7 +896,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // コピーボタン
                         IconButton(
                           icon: const Icon(Icons.copy_outlined, color: Colors.blueGrey),
                           tooltip: '糸巻きストックを複製',
@@ -904,17 +903,19 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                             StockDialogs.showEditTiedDialog(
                               context: context,
                               tied: item,
+                              allStaples: stapleStocks,
                               isCopy: true,
-                              onSaved: (copiedTied) {
+                              onSaved: (copiedTied, selectedStaple, oldStaple) {
                                 setState(() {
                                   _tiedStocks.insert(0, copiedTied);
+                                  selectedStaple.status = StapleStatus.tied; // 選択したチューブを使用中に変更
                                 });
                                 _saveData();
                               },
                             );
                           },
                         ),
-                        // 編集ボタン
+                        // 編集ボタン側も同様にチューブ変更に対応させる場合
                         IconButton(
                           icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
                           tooltip: '糸巻きストックを編集',
@@ -922,9 +923,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                             StockDialogs.showEditTiedDialog(
                               context: context,
                               tied: item,
+                              allStaples: stapleStocks,
                               isCopy: false,
-                              onSaved: (_) {
-                                setState(() {});
+                              onSaved: (updatedTied, selectedStaple, oldStaple) {
+                                setState(() {
+                                  selectedStaple.status = StapleStatus.tied;
+                                  // チューブが変更された場合、古いチューブを未使用に戻す
+                                  if (oldStaple != null && oldStaple.id != selectedStaple.id) {
+                                    oldStaple.status = StapleStatus.unused;
+                                  }
+                                });
                                 _saveData();
                               },
                             );

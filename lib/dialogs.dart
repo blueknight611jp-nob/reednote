@@ -349,7 +349,7 @@ class StockDialogs {
   }) {
     final brandController = TextEditingController();
     final modelController = TextEditingController(text: '2');
-    final lengthController = TextEditingController(text: '46mm');
+    final lengthController = TextEditingController(text: '46');
     final markController = TextEditingController(text: 'a');
 
     final frequentBrands = _getFrequentOptions(existingBrands);
@@ -374,7 +374,7 @@ class StockDialogs {
             const SizedBox(height: 8),
             TextField(
               controller: lengthController,
-              decoration: const InputDecoration(labelText: '長さ (例: 46mm)'),
+              decoration: const InputDecoration(labelText: '長さ (例: 46)'),
             ),
             const SizedBox(height: 8),
             TextField(
@@ -749,9 +749,31 @@ class StockDialogs {
   static void showEditTiedDialog({
     required BuildContext context,
     required TiedStock tied,
+    required List<StapleStock> allStaples,
     bool isCopy = false, // true の場合は新規 ID を発行して複製
-    required Function(TiedStock) onSaved,
+    required Function(TiedStock, StapleStock, StapleStock?) onSaved,
   }) {
+    // 利用可能なチューブ（未使用のもの ＋ 現在このリードが使っているチューブ）を抽出
+    final availableStaples = allStaples.where((st) => 
+      st.status == StapleStatus.unused || st.id == tied.stapleId
+    ).toList();
+
+    // ▼ ご希望の順序（ブランド ＞ モデル ＞ 長さ ＞ マーク）でソート
+    availableStaples.sort((a, b) {
+      int c = b.brand.compareTo(a.brand);
+      if (c != 0) return c;
+      c = b.model.compareTo(a.model);
+      if (c != 0) return c;
+      c = b.length.compareTo(a.length);
+      if (c != 0) return c;
+      return b.mark.compareTo(a.mark);
+    });
+
+    StapleStock? selectedStaple = availableStaples.firstWhere(
+      (st) => st.id == tied.stapleId,
+      orElse: () => availableStaples.isNotEmpty ? availableStaples.first : StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+    );
+
     final lengthController = TextEditingController(text: tied.totalLength.toString());
     final List<String> threadColors = ['黒', '紫', '青', '緑', '黄', '橙', '桃', '赤'];
     String selectedColor = threadColors.contains(tied.threadColor) ? tied.threadColor! : '赤';
@@ -773,6 +795,27 @@ class StockDialogs {
               children: [
                 Text('ケーン: ${tied.shapedTitle}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
+                
+                // チューブ選択ドロップダウン
+                const Text('チューブ選択', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                const SizedBox(height: 4),
+                if (availableStaples.isEmpty)
+                  const Text('利用可能なチューブがありません', style: TextStyle(color: Colors.red, fontSize: 13))
+                else
+                  DropdownButton<StapleStock>(
+                    isExpanded: true,
+                    value: availableStaples.contains(selectedStaple) ? selectedStaple : availableStaples.first,
+                    items: availableStaples.map((st) => DropdownMenuItem(
+                      value: st,
+                      // 表示形式も [ブランド モデル 長さ (マーク)] のように分かりやすく統一
+                      child: Text('[${st.brand} ${st.model}] ${st.length} (${st.mark})', style: const TextStyle(fontSize: 14)),
+                    )).toList(),
+                    onChanged: (val) {
+                      if (val != null) setState(() => selectedStaple = val);
+                    },
+                  ),
+                const SizedBox(height: 12),
+
                 TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
                 const SizedBox(height: 8),
                 DropdownButtonFormField<String>(
@@ -796,34 +839,49 @@ class StockDialogs {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
             ElevatedButton(
-              onPressed: () {
+              onPressed: selectedStaple == null || selectedStaple!.id.isEmpty ? null : () {
                 Navigator.pop(context);
 
                 final newLength = double.tryParse(lengthController.text) ?? tied.totalLength;
                 final newMemo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+                
+                StapleStock? oldStaple = allStaples.firstWhere(
+                  (st) => st.id == tied.stapleId,
+                  orElse: () => selectedStaple!,
+                );
 
                 if (isCopy) {
-                  // 複製の処理：タイムスタンプを付与して新しいIDを発行
+                  String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                  String tiedId = '$staplePrefix-${tied.shapedCode}';
+                  if (tiedId == tied.id) {
+                    tiedId = '${tiedId}_copy_${DateTime.now().millisecondsSinceEpoch}';
+                  }
+
                   final copiedTied = TiedStock(
-                    id: '${tied.id}_copy_${DateTime.now().millisecondsSinceEpoch}',
-                    stapleId: tied.stapleId,
+                    id: tiedId,
+                    stapleId: selectedStaple!.id,
                     shapedCode: tied.shapedCode,
                     shapedTitle: tied.shapedTitle,
-                    tiedDate: DateTime.now().toString().split(' ')[0], // 複製日を本日に設定
+                    tiedDate: DateTime.now().toString().split(' ')[0],
                     totalLength: newLength,
                     threadColor: selectedColor,
                     threadMaterial: selectedMaterial,
                     vendor: tied.vendor,
                     memo: newMemo,
                   );
-                  onSaved(copiedTied);
+                  onSaved(copiedTied, selectedStaple!, null);
                 } else {
-                  // 編集の処理：既存のインスタンスを更新
+                  String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                  if (selectedStaple!.id != tied.stapleId) {
+                    tied.id = '$staplePrefix-${tied.shapedCode}';
+                    tied.stapleId = selectedStaple!.id;
+                  }
                   tied.totalLength = newLength;
                   tied.threadColor = selectedColor;
                   tied.threadMaterial = selectedMaterial;
                   tied.memo = newMemo;
-                  onSaved(tied);
+
+                  onSaved(tied, selectedStaple!, oldStaple);
                 }
               },
               child: Text(isCopy ? '複製して追加' : '保存'),
