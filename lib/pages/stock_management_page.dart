@@ -33,9 +33,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   String? _highlightedId; // 現在ハイライトされているアイテムのID
   Timer? _highlightTimer;   // ハイライトを消すためのタイマー
 
-  // ★ 糸巻きタブ用のソート順（初期値：糸の色順）
-  //String _tiedSortOrder = 'color';
-  // ★ 糸巻きタブ用のソート順（初期値：糸巻き日（新しい順））
   String _tiedSortOrder = 'date_desc';
 
   List<StapleStock> getSortedStaples() {
@@ -145,7 +142,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('[チューブ: ${staple.displayTitle}]\nケーン: ${tied.shapedTitle}'),
+              Text('[チューブ: ${staple.model} ${staple.length}mm (${staple.mark})]\nケーン: ${tied.shapedTitle}'),
               const SizedBox(height: 8),
               Text('糸巻き時全長: ${tied.totalLength} mm', style: const TextStyle(color: Colors.black54)),
               const SizedBox(height: 16),
@@ -206,7 +203,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         tiedDate: tied.tiedDate,
         totalLength: tied.totalLength,
         cuttingLength: cuttingLength,
-        qualityLevel: 1,
+        qualityLevel: 1, // 確実に Lv.1
         threadColor: tied.threadColor,
         vendor: tied.vendor,
         logs: [
@@ -226,6 +223,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     await _loadWorkingReedIds();
 
     if (mounted) {
+      // ページ1へ移動
       MainRootPage.switchPage(context, 0);
     }
   }
@@ -831,7 +829,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                               style: const TextStyle(color: Colors.black, fontSize: 16),
                               children: [
                                 TextSpan(
-                                  text: '${item.model} ${item.length} ', 
+                                  text: '${item.model} ${item.length}mm ', 
                                   style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
                                 ),
                                 TextSpan(

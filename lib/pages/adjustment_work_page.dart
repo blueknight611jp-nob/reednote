@@ -8,7 +8,12 @@ import '../utils/reed_id_utils.dart';
 import '../main.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
-  const AdjustmentWorkPage({super.key});
+  final int initialLevelIndex; // 外部から初期タブインデックス（0 = Lv.1）を指定可能に
+
+  const AdjustmentWorkPage({
+    super.key,
+    this.initialLevelIndex = 0,
+  });
 
   @override
   State<AdjustmentWorkPage> createState() => _AdjustmentWorkPageState();
@@ -25,7 +30,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void initState() {
     super.initState();
-    _subTabController = TabController(length: _levels.length, vsync: this);
+    // 渡された initialLevelIndex で TabController を初期化
+    _subTabController = TabController(
+      length: _levels.length,
+      vsync: this,
+      initialIndex: widget.initialLevelIndex.clamp(0, _levels.length - 1),
+    );
     
     _subTabController.addListener(() {
       if (!_subTabController.indexIsChanging) {
@@ -45,7 +55,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadWorkReeds(); // 画面に戻ってきた際やタブ切り替え時に自動リロード
+    _loadWorkReeds();
   }
 
   Future<void> _loadWorkReeds() async {
@@ -65,7 +75,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       _stapleStocks = decoded.map((e) => StapleStock.fromJson(e)).toList();
     }
 
-    setState(() {});
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   Future<void> _saveWorkReeds() async {
@@ -140,6 +152,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     await _loadWorkReeds();
 
     if (mounted) {
+      // 指定のレベルのタブへ確実に切り替え
+      final targetIndex = (qualityLevel - 1).clamp(0, _levels.length - 1);
+      _subTabController.animateTo(targetIndex);
       MainRootPage.switchPage(context, 0);
     }
   }
@@ -278,7 +293,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   }
 
   void _pickAndAddPhoto(WorkReed reed) {
-    final uploadInput = html.FileUploadInputElement()..accept = 'images/*';
+    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
     uploadInput.click();
     uploadInput.onChange.listen((e) {
       final files = uploadInput.files;
@@ -1023,9 +1038,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // ==========================================
                 // 1行目：チューブ情報 + カスタムマーク + ケーンタイトル + IDリンク
-                // ==========================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -1083,18 +1096,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                 
                 const SizedBox(height: 6),
 
-                // ==========================================
                 // 2行目：糸の種類、糸の色、ラベルレベル、今の長さ、登録日
-                // ==========================================
                 Wrap(
                   crossAxisAlignment: WrapCrossAlignment.center,
                   spacing: 8,
                   runSpacing: 4,
                   children: [
-                    // 糸の種類
                     Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
                     
-                    // 糸の色（色ドット ＋ 色名）
                     if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
                       const Text('| 糸:'),
                       Container(
@@ -1108,7 +1117,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
                     ],
 
-                    // 品質レベル（ドロップダウンでその場で変更可能）
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
@@ -1145,10 +1153,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       ),
                     ),
 
-                    // 今の長さ
                     Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
-
-                    // 登録日
                     Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
                   ],
                 ),
