@@ -17,6 +17,7 @@ class AdjustmentWorkPage extends StatefulWidget {
 class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     with SingleTickerProviderStateMixin {
   List<WorkReed> _workReeds = [];
+  List<StapleStock> _stapleStocks = []; // チューブ情報取得用
   late TabController _subTabController;
 
   final List<int> _levels = [1, 2, 3, 4, 5];
@@ -26,7 +27,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     super.initState();
     _subTabController = TabController(length: _levels.length, vsync: this);
     
-    // ★ 追加: タブが切り替わった時にも最新データを読み込む
     _subTabController.addListener(() {
       if (!_subTabController.indexIsChanging) {
         _loadWorkReeds();
@@ -45,18 +45,27 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _loadWorkReeds();
+    _loadWorkReeds(); // 画面に戻ってきた際やタブ切り替え時に自動リロード
   }
 
   Future<void> _loadWorkReeds() async {
     final prefs = await SharedPreferences.getInstance();
+    
+    // リードデータの読み込み
     final jsonString = prefs.getString('work_leads_data');
     if (jsonString != null) {
       final List decoded = jsonDecode(jsonString);
-      setState(() {
-        _workReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
-      });
+      _workReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
     }
+
+    // チューブデータの読み込み（モデル名などの表示に利用）
+    final stapleJson = prefs.getString('staple_stocks');
+    if (stapleJson != null) {
+      final List decoded = jsonDecode(stapleJson);
+      _stapleStocks = decoded.map((e) => StapleStock.fromJson(e)).toList();
+    }
+
+    setState(() {});
   }
 
   Future<void> _saveWorkReeds() async {
@@ -72,7 +81,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     return '$cleanModel$cleanLength$cleanMark';
   }
 
-  // ★ 共通ヘルパー関数: WorkReed の新規生成・保存・ページ移動の一体化
   Future<void> _registerAndMoveToWork({
     required String id,
     required String stapleId,
@@ -127,11 +135,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       );
     }
 
-    // ★ 自身の画面の状態を最新に更新
     await _loadWorkReeds();
 
     if (mounted) {
-      // 調整部屋（インデックス0）へ移動
       MainRootPage.switchPage(context, 0);
     }
   }
@@ -233,7 +239,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       
       bool updated = false;
 
-      // 1. 完全一致（id同士）で検索
       for (var st in staples) {
         if (st.id == reed.stapleId) {
           st.status = StapleStatus.unused;
@@ -242,7 +247,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         }
       }
 
-      // 2. もし ID で一致しなかった場合のフォールバック検索（displayTitle やモデル表記からの照合）
       if (!updated) {
         for (var st in staples) {
           if (st.status == StapleStatus.unused &&
@@ -983,6 +987,13 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       itemCount: reeds.length,
       itemBuilder: (context, index) {
         final reed = reeds[index];
+
+        // 対応するチューブ情報を取得
+        final staple = _stapleStocks.firstWhere(
+          (s) => s.id == reed.stapleId,
+          orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+        );
+
         return Card(
           elevation: 2,
           margin: const EdgeInsets.only(bottom: 12),
@@ -991,19 +1002,26 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ==========================================
+                // 1行目：チューブ情報 + ケーンタイトル + IDリンク
+                // ==========================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
                         children: [
+                          Text(
+                            '${staple.model} ${staple.length}${staple.mark}',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
+                          ),
                           Text(
                             reed.shapedTitle,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           if (reed.id.isNotEmpty) ...[
-                            const SizedBox(width: 6),
                             const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
                             ReedIdUtils.buildClickableIdParts(context, reed.id, null),
                             const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
@@ -1028,14 +1046,40 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Row(
+                
+                const SizedBox(height: 6),
+
+                // ==========================================
+                // 2行目：糸の種類、糸の色、ラベルレベル、今の長さ、登録日
+                // ==========================================
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  runSpacing: 4,
                   children: [
+                    // 糸の種類
+                    Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                    
+                    // 糸の色（色ドット ＋ 色名）
+                    if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
+                      const Text('| 糸:'),
+                      Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: getThreadColor(reed.threadColor),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
+                    ],
+
+                    // 品質レベル（ドロップダウンでその場で変更可能）
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: Colors.amber.shade300),
                       ),
                       child: DropdownButton<int>(
@@ -1047,7 +1091,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                             value: lvl,
                             child: Text(
                               lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}',
-                              style: TextStyle(fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
                             ),
                           );
                         }).toList(),
@@ -1065,35 +1109,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Chip(
-                      label: Text('全長: ${reed.cuttingLength}mm'),
-                      backgroundColor: Colors.amber.shade100,
-                    ),
+
+                    // 今の長さ
+                    Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
+
+                    // 登録日
+                    Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
                   ],
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    const Text('コード: '),
-                    ReedIdUtils.buildClickableIdParts(context, reed.shapedCode, null),
-                    Text('  /  登録日: ${reed.tiedDate}'),
-                    if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
-                      const Text('  /  糸: '),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: getThreadColor(reed.threadColor),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      Text('${reed.threadColor}'),
-                    ],
-                  ],
-                ),
+
                 const SizedBox(height: 12),
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,

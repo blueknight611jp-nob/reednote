@@ -34,7 +34,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   Timer? _highlightTimer;   // ハイライトを消すためのタイマー
 
   // ★ 糸巻きタブ用のソート順（初期値：糸の色順）
-  String _tiedSortOrder = 'color';
+  //String _tiedSortOrder = 'color';
+  // ★ 糸巻きタブ用のソート順（初期値：糸巻き日（新しい順））
+  String _tiedSortOrder = 'date_desc';
 
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
