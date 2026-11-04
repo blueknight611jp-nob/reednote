@@ -417,6 +417,7 @@ class WorkReed {
   String? threadColor;
   String? threadMaterial;
   String? vendor;
+  String? customTag;
   List<String> photosBase64;
   List<WorkReedLog> logs;
 
@@ -432,6 +433,7 @@ class WorkReed {
     this.threadColor,
     this.threadMaterial,
     this.vendor,
+    this.customTag,
     List<String>? photosBase64,
     required this.logs,
   }) : photosBase64 = photosBase64 ?? [];
@@ -448,6 +450,7 @@ class WorkReed {
         'threadColor': threadColor,
         'threadMaterial': threadMaterial,
         'vendor': vendor,
+        'customTag': customTag,
         'photosBase64': photosBase64,
         'logs': logs.map((e) => e.toJson()).toList(),
       };
@@ -465,6 +468,7 @@ class WorkReed {
       threadColor: json['threadColor'],
       threadMaterial: json['threadMaterial'],
       vendor: json['vendor'],
+      customTag: json['customTag'],
       photosBase64: json['photosBase64'] != null ? List<String>.from(json['photosBase64']) : [],
       logs: (json['logs'] as List?)?.map((e) => WorkReedLog.fromJson(e)).toList() ?? [],
     );

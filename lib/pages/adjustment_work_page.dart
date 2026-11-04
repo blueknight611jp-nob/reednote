@@ -92,6 +92,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     required int qualityLevel,
     required String? threadColor,
     required String? vendor,
+    String? customTag,
     required List<String> photosBase64,
     required String initialMemo,
   }) async {
@@ -117,6 +118,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
         qualityLevel: qualityLevel,
         threadColor: threadColor,
         vendor: vendor,
+        customTag: customTag,
         photosBase64: photosBase64,
         logs: [
           ScrapeLog(
@@ -353,6 +355,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
     String selectedType = 'ナイロン';
     String selectedColor = '赤';
+    
+    final customTagController = TextEditingController(text: existingReed?.customTag ?? '');
 
     if (existingReed != null && existingReed.threadColor != null && existingReed.threadColor!.isNotEmpty) {
       final t = existingReed.threadColor!;
@@ -495,6 +499,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         keyboardType: TextInputType.number,
                       ),
                       const SizedBox(height: 12),
+                      TextField(
+                        controller: customTagController,
+                        decoration: const InputDecoration(
+                          labelText: '識別マーク・番号 (例: 1, 2, a など)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       const Text('写真管理', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                       const SizedBox(height: 6),
                       Wrap(
@@ -588,6 +600,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     final dateStr = DateTime.now().toString().split(' ')[0];
                     final shapedTitleText = '$selectedModel ${lengthController.text}mm';
                     final combinedThreadColor = '$selectedType$selectedColor';
+                    final customTagText = customTagController.text.trim().isEmpty 
+                        ? null 
+                        : customTagController.text.trim();
 
                     if (existingReed == null) {
                       final uniqueId = DateTime.now().microsecondsSinceEpoch.toString();
@@ -621,6 +636,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         qualityLevel: qualityLevel,
                         threadColor: combinedThreadColor,
                         vendor: null,
+                        customTag: customTagText,
                         photosBase64: photos,
                         initialMemo: memoController.text.isNotEmpty 
                             ? '【初期登録】 ${memoController.text}' 
@@ -632,10 +648,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         existingReed.qualityLevel = qualityLevel;
                         existingReed.cuttingLength = totalLengthController.text;
                         existingReed.threadColor = combinedThreadColor;
+                        existingReed.customTag = customTagText;
                         existingReed.photosBase64 = photos;
                       });
                       _saveWorkReeds();
                       Navigator.pop(context);
+                      if (qualityLevel > 0) {
+                        _subTabController.animateTo(qualityLevel - 1);
+                      }
                     }
 
                     if (mounted) {
@@ -741,6 +761,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     if (currentLevel == 0) {
                       _confirmAndDismantle(reed);
                     } else {
+                      _subTabController.animateTo(currentLevel - 1);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('ログを追加しました')),
                       );
@@ -1003,7 +1024,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // ==========================================
-                // 1行目：チューブ情報 + ケーンタイトル + IDリンク
+                // 1行目：チューブ情報 + カスタムマーク + ケーンタイトル + IDリンク
                 // ==========================================
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1017,6 +1038,19 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                             '${staple.model} ${staple.length}${staple.mark}',
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
                           ),
+                          if (reed.customTag != null && reed.customTag!.isNotEmpty) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade100,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                'No. ${reed.customTag}',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
+                              ),
+                            ),
+                          ],
                           Text(
                             reed.shapedTitle,
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
@@ -1104,6 +1138,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                                 reed.qualityLevel = newLevel;
                               });
                               _saveWorkReeds();
+                              _subTabController.animateTo(newLevel - 1);
                             }
                           }
                         },
