@@ -129,6 +129,8 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   void _confirmAndSendToCutAndScrape(TiedStock tied) {
+    final cuttingLengthController = TextEditingController(text: '71.0');
+
     showDialog(
       context: context,
       builder: (context) {
@@ -139,14 +141,43 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
         return AlertDialog(
           title: const Text('管理・調整部屋へ登録'),
-          content: Text('[チューブ: ${staple.displayTitle}]\nこのリードを「Lv.1（荒削り）」として登録し、ページ1へ移動しますか？'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('[チューブ: ${staple.displayTitle}]\nケーン: ${tied.shapedTitle}'),
+              const SizedBox(height: 8),
+              Text('糸巻き時全長: ${tied.totalLength} mm', style: const TextStyle(color: Colors.black54)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: cuttingLengthController,
+                decoration: const InputDecoration(
+                  labelText: '先端カット後の長さ (mm)',
+                  border: OutlineInputBorder(),
+                  helperText: '※初期カット後の使用長を入力してください',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              const Text('このリードを「Lv.1（荒削り）」として登録し、ページ1へ移動しますか？'),
+            ],
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
+            ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.amber.shade800,
+                foregroundColor: Colors.white,
+              ),
               onPressed: () async {
+                final cutLen = cuttingLengthController.text.trim().isEmpty 
+                    ? '71.0' 
+                    : cuttingLengthController.text.trim();
                 Navigator.pop(context);
-                await _sendToCutAndScrapeAction(tied);
+                await _sendToCutAndScrapeAction(tied, cutLen);
               },
               child: const Text('登録してページ1へ移動'),
             ),
@@ -156,7 +187,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     );
   }
 
-  Future<void> _sendToCutAndScrapeAction(TiedStock tied) async {
+  Future<void> _sendToCutAndScrapeAction(TiedStock tied, String cuttingLength) async {
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('work_leads_data');
     List<WorkReed> currentWorkReeds = [];
@@ -173,11 +204,20 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         shapedCode: tied.shapedCode,
         shapedTitle: tied.shapedTitle,
         tiedDate: tied.tiedDate,
-        currentTotalLength: tied.totalLength.toString(),
+        totalLength: tied.totalLength,
+        cuttingLength: cuttingLength,
         qualityLevel: 1,
         threadColor: tied.threadColor,
         vendor: tied.vendor,
-        logs: [],
+        logs: [
+          ScrapeLog(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            date: DateTime.now().toString().split(' ')[0],
+            level: 1,
+            cuttingLength: cuttingLength,
+            memo: '素材ストックから登録 (カット長: ${cuttingLength}mm)',
+          ),
+        ],
       );
       currentWorkReeds.add(newWorkReed);
       await prefs.setString('work_leads_data', jsonEncode(currentWorkReeds.map((e) => e.toJson()).toList()));
@@ -189,6 +229,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       MainRootPage.switchPage(context, 0);
     }
   }
+
 
   List<String> _getAllExistingBrands() {
     Set<String> brands = {'Rigotti', 'Tchankaya', 'Alliaud', 'Chiarugi', 'Loree', 'Glotin', 'Guercio'};

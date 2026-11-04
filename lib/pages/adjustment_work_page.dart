@@ -239,7 +239,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     String selectedModel = initialModel;
     
     int qualityLevel = existingReed?.qualityLevel ?? _levels[_subTabController.index];
-    String totalLength = existingReed?.currentTotalLength ?? '71.0';
+    String totalLength = existingReed?.cuttingLength ?? '71.0';
     List<String> photos = existingReed != null ? List.from(existingReed.photosBase64) : [];
 
     final lengthController = TextEditingController(
@@ -518,7 +518,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         shapedCode: 'ダイレクト登録',
                         shapedTitle: shapedTitleText,
                         tiedDate: dateStr,
-                        currentTotalLength: totalLengthController.text,
+                        totalLength: 73.0,
+                        cuttingLength: totalLengthController.text,
                         qualityLevel: qualityLevel,
                         threadColor: combinedThreadColor,
                         photosBase64: photos,
@@ -528,7 +529,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                               id: DateTime.now().microsecondsSinceEpoch.toString(),
                               date: dateStr,
                               level: qualityLevel,
-                              totalLength: totalLengthController.text,
+                              cuttingLength: totalLengthController.text,
                               memo: '【初期登録】 ${memoController.text}',
                             ),
                         ],
@@ -540,7 +541,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       setState(() {
                         existingReed.shapedTitle = shapedTitleText;
                         existingReed.qualityLevel = qualityLevel;
-                        existingReed.currentTotalLength = totalLengthController.text;
+                        existingReed.cuttingLength = totalLengthController.text;
                         existingReed.threadColor = combinedThreadColor;
                         existingReed.photosBase64 = photos;
                       });
@@ -563,7 +564,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 
   void _showAddLogDialog(WorkReed reed) {
     final dateController = TextEditingController(text: DateTime.now().toString().split(' ')[0]);
-    final lengthController = TextEditingController(text: reed.currentTotalLength);
+    final lengthController = TextEditingController(text: reed.cuttingLength);
     final resistanceController = TextEditingController();
     final pitchController = TextEditingController();
     final memoController = TextEditingController();
@@ -629,7 +630,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       id: DateTime.now().microsecondsSinceEpoch.toString(),
                       date: dateController.text,
                       level: currentLevel,
-                      totalLength: lengthController.text,
+                      cuttingLength: lengthController.text,
                       resistanceRating: resistanceController.text,
                       pitchRating: pitchController.text,
                       memo: memoController.text,
@@ -639,7 +640,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       reed.logs.insert(0, newLog);
                       reed.qualityLevel = currentLevel;
                       if (lengthController.text.isNotEmpty) {
-                        reed.currentTotalLength = lengthController.text;
+                        reed.cuttingLength = lengthController.text;
                       }
                     });
                     _saveWorkReeds();
@@ -665,7 +666,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 
   void _showEditLogDialog(WorkReed reed, ScrapeLog log) {
     final dateController = TextEditingController(text: log.date);
-    final lengthController = TextEditingController(text: log.totalLength ?? '');
+    final lengthController = TextEditingController(text: log.cuttingLength ?? '');
     final resistanceController = TextEditingController(text: log.resistanceRating ?? '');
     final pitchController = TextEditingController(text: log.pitchRating ?? '');
     final memoController = TextEditingController(text: log.memo ?? '');
@@ -722,7 +723,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     setState(() {
                       log.date = dateController.text;
                       log.level = editLevel;
-                      log.totalLength = lengthController.text;
+                      log.cuttingLength = lengthController.text;
                       log.resistanceRating = resistanceController.text;
                       log.pitchRating = pitchController.text;
                       log.memo = memoController.text;
@@ -978,7 +979,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     ),
                     const SizedBox(width: 8),
                     Chip(
-                      label: Text('全長: ${reed.currentTotalLength}mm'),
+                      label: Text('全長: ${reed.cuttingLength}mm'),
                       backgroundColor: Colors.amber.shade100,
                     ),
                   ],

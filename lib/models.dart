@@ -359,12 +359,11 @@ class TiedStock {
 // 7. 調整作業用リード (WorkReed & ログ)
 // ==========================================
 class WorkReedLog {
-  String? id;          // 追加：ログの個別ID
+  String? id;          
   String date;
   int qualityLevel;
   int? level;
-  double length;
-  String? totalLength; // 追加：ログごとの全長（テキスト入力対応用）
+  String? cuttingLength; // ★ カット長・調整中の長さ
   String? resistanceRating;
   String? pitchRating;
   String comment;
@@ -375,8 +374,7 @@ class WorkReedLog {
     required this.date,
     this.qualityLevel = 1,
     this.level,
-    this.length = 0.0,
-    this.totalLength,
+    this.cuttingLength,
     this.resistanceRating,
     this.pitchRating,
     this.comment = '',
@@ -388,8 +386,7 @@ class WorkReedLog {
         'date': date,
         'qualityLevel': qualityLevel,
         'level': level,
-        'length': length,
-        'totalLength': totalLength,
+        'cuttingLength': cuttingLength,
         'resistanceRating': resistanceRating,
         'pitchRating': pitchRating,
         'comment': comment,
@@ -402,8 +399,7 @@ class WorkReedLog {
       date: json['date'] ?? '',
       qualityLevel: json['qualityLevel'] ?? 1,
       level: json['level'],
-      length: (json['length'] as num?)?.toDouble() ?? 0.0,
-      totalLength: json['totalLength'] ?? (json['length']?.toString()),
+      cuttingLength: json['cuttingLength']?.toString() ?? json['totalLength']?.toString() ?? json['length']?.toString(),
       resistanceRating: json['resistanceRating'],
       pitchRating: json['pitchRating'],
       comment: json['comment'] ?? '',
@@ -412,7 +408,6 @@ class WorkReedLog {
   }
 }
 
-// 互換性のためのエイリアス
 typedef ScrapeLog = WorkReedLog;
 
 class WorkReed {
@@ -421,7 +416,8 @@ class WorkReed {
   String shapedCode;
   String shapedTitle;
   String tiedDate;
-  String currentTotalLength;
+  double totalLength;    // ★ 糸巻き時の全長
+  String cuttingLength;  // ★ カット後の使用長・現在の長さ
   int qualityLevel;
   String? threadColor;
   String? threadMaterial;
@@ -435,7 +431,8 @@ class WorkReed {
     required this.shapedCode,
     required this.shapedTitle,
     required this.tiedDate,
-    required this.currentTotalLength,
+    required this.totalLength,
+    required this.cuttingLength,
     required this.qualityLevel,
     this.threadColor,
     this.threadMaterial,
@@ -450,7 +447,8 @@ class WorkReed {
         'shapedCode': shapedCode,
         'shapedTitle': shapedTitle,
         'tiedDate': tiedDate,
-        'currentTotalLength': currentTotalLength,
+        'totalLength': totalLength,
+        'cuttingLength': cuttingLength,
         'qualityLevel': qualityLevel,
         'threadColor': threadColor,
         'threadMaterial': threadMaterial,
@@ -466,7 +464,8 @@ class WorkReed {
       shapedCode: json['shapedCode'] ?? '',
       shapedTitle: json['shapedTitle'] ?? '',
       tiedDate: json['tiedDate'] ?? '',
-      currentTotalLength: json['currentTotalLength'] ?? '73.0',
+      totalLength: (json['totalLength'] as num?)?.toDouble() ?? 73.0,
+      cuttingLength: json['cuttingLength'] ?? json['currentTotalLength'] ?? '71.0',
       qualityLevel: json['qualityLevel'] ?? 1,
       threadColor: json['threadColor'],
       threadMaterial: json['threadMaterial'],
