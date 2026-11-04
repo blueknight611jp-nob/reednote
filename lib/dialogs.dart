@@ -416,42 +416,68 @@ class StockDialogs {
     final lengthController = TextEditingController(text: staple.length);
     final markController = TextEditingController(text: staple.mark);
     final memoController = TextEditingController(text: staple.memo ?? '');
+    
+    // ★ 選択中の使用状況を保持する変数
+    StapleStatus selectedStatus = staple.status;
 
     final frequentModels = _getFrequentOptions(existingModels);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('チューブ 編集'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildAutocompleteField(controller: modelController, label: 'モデル', options: frequentModels),
-              const SizedBox(height: 8),
-              TextField(controller: lengthController, decoration: const InputDecoration(labelText: '長さ')),
-              const SizedBox(height: 8),
-              TextField(controller: markController, decoration: const InputDecoration(labelText: 'マーク')),
-              const SizedBox(height: 8),
-              TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-          ElevatedButton(
-            onPressed: () {
-              staple.model = modelController.text.trim();
-              staple.length = lengthController.text.trim();
-              staple.mark = markController.text.trim();
-              staple.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('チューブ 編集'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAutocompleteField(controller: modelController, label: 'モデル', options: frequentModels),
+                const SizedBox(height: 8),
+                TextField(controller: lengthController, decoration: const InputDecoration(labelText: '長さ')),
+                const SizedBox(height: 8),
+                TextField(controller: markController, decoration: const InputDecoration(labelText: 'マーク')),
+                const SizedBox(height: 8),
+                
+                // ★ 使用状況の切り替え用ドロップダウン
+                DropdownButtonFormField<StapleStatus>(
+                  value: selectedStatus,
+                  decoration: const InputDecoration(labelText: '使用状況'),
+                  items: StapleStatus.values.map((status) {
+                    return DropdownMenuItem(
+                      value: status,
+                      child: Text(status.label), // '未使用' または '糸巻き済み'
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => selectedStatus = val);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
 
-              onSaved();
-              Navigator.pop(context);
-            },
-            child: const Text('保存'),
+                TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ')),
+              ],
+            ),
           ),
-        ],
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+            ElevatedButton(
+              onPressed: () {
+                staple.model = modelController.text.trim();
+                staple.length = lengthController.text.trim();
+                staple.mark = markController.text.trim();
+                staple.status = selectedStatus; // ★ ステータスを保存
+                staple.memo = memoController.text.trim().isEmpty ? null : memoController.text.trim();
+
+                onSaved();
+                Navigator.pop(context);
+              },
+              child: const Text('保存'),
+            ),
+          ],
+        ),
       ),
     );
   }
