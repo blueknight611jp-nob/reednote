@@ -186,7 +186,7 @@ class StockDialogs {
                     brand: brand,
                     purchasePeriod: period,
                     diameter: diameterController.text.trim(),
-                    vendor: vendor, // ← sourceInfo から vendor に修正済み
+                    vendor: vendor,
                     remainingCount: count,
                     memo: memo,
                   );
@@ -340,19 +340,19 @@ class StockDialogs {
     );
   }
 
-  // 3. チューブ (Staple) 専用ダイアログ（新規登録）
+  // ==========================================================
+  // 3. チューブ (Staple) 専用ダイアログ（新規登録・編集）
   // ==========================================================
   static void showAddStapleDialog({
     required BuildContext context,
-    required List<String> existingBrands,
+    required List<String> existingModels,
     required Function(List<StapleStock>) onRegistered,
   }) {
-    final brandController = TextEditingController();
-    final modelController = TextEditingController(text: '2');
+    final modelController = TextEditingController(text: 'Chiarugi 2');
     final lengthController = TextEditingController(text: '46');
     final markController = TextEditingController(text: 'a');
 
-    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentModels = _getFrequentOptions(existingModels);
 
     showDialog(
       context: context,
@@ -362,14 +362,9 @@ class StockDialogs {
           mainAxisSize: MainAxisSize.min,
           children: [
             _buildAutocompleteField(
-              controller: brandController,
-              label: 'ブランド (例: Chiarugi)',
-              options: frequentBrands,
-            ),
-            const SizedBox(height: 8),
-            TextField(
               controller: modelController,
-              decoration: const InputDecoration(labelText: 'モデル (例: 2)'),
+              label: 'モデル (例: Chiarugi 2, Rigotti)',
+              options: frequentModels.isNotEmpty ? frequentModels : ['Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree'],
             ),
             const SizedBox(height: 8),
             TextField(
@@ -390,14 +385,12 @@ class StockDialogs {
           ),
           ElevatedButton(
             onPressed: () {
-              final brand = brandController.text.trim();
-              if (brand.isEmpty) return;
+              final model = modelController.text.trim();
+              if (model.isEmpty) return;
 
-              // 常に1本だけ生成して呼び出し元へ引き渡す
               final newStaple = StapleStock(
                 id: 'Staple_${DateTime.now().microsecondsSinceEpoch}',
-                brand: brand,
-                model: modelController.text.trim(),
+                model: model,
                 length: lengthController.text.trim(),
                 mark: markController.text.trim(),
                 status: StapleStatus.unused,
@@ -416,16 +409,15 @@ class StockDialogs {
   static void showEditStapleDialog({
     required BuildContext context,
     required StapleStock staple,
-    required List<String> existingBrands,
+    required List<String> existingModels,
     required VoidCallback onSaved,
   }) {
-    final brandController = TextEditingController(text: staple.brand);
     final modelController = TextEditingController(text: staple.model);
     final lengthController = TextEditingController(text: staple.length);
     final markController = TextEditingController(text: staple.mark);
     final memoController = TextEditingController(text: staple.memo ?? '');
 
-    final frequentBrands = _getFrequentOptions(existingBrands);
+    final frequentModels = _getFrequentOptions(existingModels);
 
     showDialog(
       context: context,
@@ -435,9 +427,7 @@ class StockDialogs {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _buildAutocompleteField(controller: brandController, label: 'ブランド', options: frequentBrands),
-              const SizedBox(height: 8),
-              TextField(controller: modelController, decoration: const InputDecoration(labelText: 'モデル')),
+              _buildAutocompleteField(controller: modelController, label: 'モデル', options: frequentModels),
               const SizedBox(height: 8),
               TextField(controller: lengthController, decoration: const InputDecoration(labelText: '長さ')),
               const SizedBox(height: 8),
@@ -451,7 +441,6 @@ class StockDialogs {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
           ElevatedButton(
             onPressed: () {
-              staple.brand = brandController.text.trim();
               staple.model = modelController.text.trim();
               staple.length = lengthController.text.trim();
               staple.mark = markController.text.trim();
@@ -523,7 +512,7 @@ class StockDialogs {
                   brand: tube.brand,
                   purchasePeriod: tube.purchasePeriod,
                   diameter: tube.diameter,
-                  vendor: tube.vendor, // 丸材の購入先を引き継ぐ
+                  vendor: tube.vendor,
                   remainingCount: count,
                   memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
                 );
@@ -577,7 +566,7 @@ class StockDialogs {
                 machine: machineController.text.trim(),
                 thickness: thickness,
                 gougingDate: DateTime.now().toString().split(' ')[0],
-                vendor: split.vendor, // 半カマボコの購入先を引き継ぐ
+                vendor: split.vendor,
                 remainingCount: 1,
               );
               onProcessed(newGouged);
@@ -626,7 +615,7 @@ class StockDialogs {
                 shaper: shaperController.text.trim(),
                 thickness: gouged.thickness,
                 shapingDate: DateTime.now().toString().split(' ')[0],
-                vendor: gouged.vendor, // カマボコの購入先を引き継ぐ
+                vendor: gouged.vendor,
                 remainingCount: 1,
               );
               onProcessed(newShaped);
@@ -647,11 +636,9 @@ class StockDialogs {
     StapleStock? selectedStaple = availableStaples.isNotEmpty ? availableStaples.first : null;
     final lengthController = TextEditingController(text: '73.0');
     
-    // 糸の色の選択肢と初期値（黒・紫・青・緑・黄・橙・桃・赤）
     final List<String> threadColors = ['黒', '紫', '青', '緑', '黄', '橙', '桃', '赤'];
     String selectedColor = '赤';
 
-    // ▼ 糸の種類（ナイロン・ポリエステル・絹、デフォルト：ナイロン）
     final List<String> threadMaterials = ['ナイロン', 'ポリエステル', '絹'];
     String selectedMaterial = 'ナイロン';
     
@@ -675,23 +662,17 @@ class StockDialogs {
                   DropdownButton<StapleStock>(
                     isExpanded: true,
                     value: selectedStaple,
-                    items: availableStaples.map((st) => DropdownMenuItem(value: st, child: Text('[${st.brand} ${st.model}] ${st.length} (${st.mark})'))).toList(),
+                    items: availableStaples.map((st) => DropdownMenuItem(value: st, child: Text('[${st.model}] ${st.length} (${st.mark})'))).toList(),
                     onChanged: (val) => setState(() => selectedStaple = val),
                   ),
                 const SizedBox(height: 8),
                 TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
                 const SizedBox(height: 8),
                 
-                // 糸の色選択ドロップダウン
                 DropdownButtonFormField<String>(
                   value: selectedColor,
                   decoration: const InputDecoration(labelText: '糸の色'),
-                  items: threadColors.map((color) {
-                    return DropdownMenuItem(
-                      value: color,
-                      child: Text(color),
-                    );
-                  }).toList(),
+                  items: threadColors.map((color) => DropdownMenuItem(value: color, child: Text(color))).toList(),
                   onChanged: (val) {
                     if (val != null) {
                       setState(() => selectedColor = val);
@@ -701,7 +682,6 @@ class StockDialogs {
 
                 const SizedBox(height: 8),
 
-                // ▼ 糸の種類選択（新規追加）
                 DropdownButtonFormField<String>(
                   value: selectedMaterial,
                   decoration: const InputDecoration(labelText: '糸の種類'),
@@ -721,7 +701,7 @@ class StockDialogs {
               onPressed: selectedStaple == null ? null : () {
                 Navigator.pop(context);
 
-                String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                String staplePrefix = '${selectedStaple!.model}${selectedStaple!.mark}'.replaceAll(' ', '');
                 String tiedId = '$staplePrefix-${shaped.id}';
 
                 final tied = TiedStock(
@@ -731,7 +711,7 @@ class StockDialogs {
                   shapedTitle: shaped.displayTitle,
                   tiedDate: DateTime.now().toString().split(' ')[0],
                   totalLength: double.tryParse(lengthController.text) ?? 73.0,
-                  threadColor: selectedColor, // 選択された変数を指定
+                  threadColor: selectedColor,
                   vendor: shaped.vendor,
                   memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
                 );
@@ -750,19 +730,16 @@ class StockDialogs {
     required BuildContext context,
     required TiedStock tied,
     required List<StapleStock> allStaples,
-    bool isCopy = false, // true の場合は新規 ID を発行して複製
+    bool isCopy = false,
     required Function(TiedStock, StapleStock, StapleStock?) onSaved,
   }) {
-    // 利用可能なチューブ（未使用のもの ＋ 現在このリードが使っているチューブ）を抽出
     final availableStaples = allStaples.where((st) => 
       st.status == StapleStatus.unused || st.id == tied.stapleId
     ).toList();
 
-    // ▼ ご希望の順序（ブランド ＞ モデル ＞ 長さ ＞ マーク）でソート
+    // モデル ＞ 長さ ＞ マーク順でソート
     availableStaples.sort((a, b) {
-      int c = b.brand.compareTo(a.brand);
-      if (c != 0) return c;
-      c = b.model.compareTo(a.model);
+      int c = b.model.compareTo(a.model);
       if (c != 0) return c;
       c = b.length.compareTo(a.length);
       if (c != 0) return c;
@@ -771,7 +748,7 @@ class StockDialogs {
 
     StapleStock? selectedStaple = availableStaples.firstWhere(
       (st) => st.id == tied.stapleId,
-      orElse: () => availableStaples.isNotEmpty ? availableStaples.first : StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+      orElse: () => availableStaples.isNotEmpty ? availableStaples.first : StapleStock(id: '', model: '不明', length: '', mark: ''),
     );
 
     final lengthController = TextEditingController(text: tied.totalLength.toString());
@@ -796,7 +773,6 @@ class StockDialogs {
                 Text('ケーン: ${tied.shapedTitle}', style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 12),
                 
-                // チューブ選択ドロップダウン
                 const Text('チューブ選択', style: TextStyle(fontSize: 12, color: Colors.grey)),
                 const SizedBox(height: 4),
                 if (availableStaples.isEmpty)
@@ -807,8 +783,7 @@ class StockDialogs {
                     value: availableStaples.contains(selectedStaple) ? selectedStaple : availableStaples.first,
                     items: availableStaples.map((st) => DropdownMenuItem(
                       value: st,
-                      // 表示形式も [ブランド モデル 長さ (マーク)] のように分かりやすく統一
-                      child: Text('[${st.brand} ${st.model}] ${st.length} (${st.mark})', style: const TextStyle(fontSize: 14)),
+                      child: Text('[${st.model}] ${st.length} (${st.mark})', style: const TextStyle(fontSize: 14)),
                     )).toList(),
                     onChanged: (val) {
                       if (val != null) setState(() => selectedStaple = val);
@@ -851,7 +826,7 @@ class StockDialogs {
                 );
 
                 if (isCopy) {
-                  String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                  String staplePrefix = '${selectedStaple!.model}${selectedStaple!.mark}'.replaceAll(' ', '');
                   String tiedId = '$staplePrefix-${tied.shapedCode}';
                   if (tiedId == tied.id) {
                     tiedId = '${tiedId}_copy_${DateTime.now().millisecondsSinceEpoch}';
@@ -871,7 +846,7 @@ class StockDialogs {
                   );
                   onSaved(copiedTied, selectedStaple!, null);
                 } else {
-                  String staplePrefix = '${selectedStaple!.brand}${selectedStaple!.mark}'.replaceAll(' ', '');
+                  String staplePrefix = '${selectedStaple!.model}${selectedStaple!.mark}'.replaceAll(' ', '');
                   if (selectedStaple!.id != tied.stapleId) {
                     tied.id = '$staplePrefix-${tied.shapedCode}';
                     tied.stapleId = selectedStaple!.id;

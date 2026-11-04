@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import '../utils/helpers.dart';
 import '../utils/reed_id_utils.dart';
+import '../main.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
   const AdjustmentWorkPage({super.key});
@@ -24,6 +25,14 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   void initState() {
     super.initState();
     _subTabController = TabController(length: _levels.length, vsync: this);
+    
+    // ★ 追加: タブが切り替わった時にも最新データを読み込む
+    _subTabController.addListener(() {
+      if (!_subTabController.indexIsChanging) {
+        _loadWorkReeds();
+      }
+    });
+
     _loadWorkReeds();
   }
 
@@ -61,6 +70,70 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     final cleanLength = length.replaceAll(RegExp(r'[^0-9]'), '');
     final cleanMark = mark.trim();
     return '$cleanModel$cleanLength$cleanMark';
+  }
+
+  // ★ 共通ヘルパー関数: WorkReed の新規生成・保存・ページ移動の一体化
+  Future<void> _registerAndMoveToWork({
+    required String id,
+    required String stapleId,
+    required String shapedCode,
+    required String shapedTitle,
+    required String tiedDate,
+    required double totalLength,
+    required String cuttingLength,
+    required int qualityLevel,
+    required String? threadColor,
+    required String? vendor,
+    required List<String> photosBase64,
+    required String initialMemo,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final jsonString = prefs.getString('work_leads_data');
+    List<WorkReed> currentWorkReeds = [];
+    if (jsonString != null) {
+      final List decoded = jsonDecode(jsonString);
+      currentWorkReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
+    }
+
+    final exists = currentWorkReeds.any((w) => w.id == id);
+    if (!exists) {
+      final dateStr = DateTime.now().toString().split(' ')[0];
+      final newWorkReed = WorkReed(
+        id: id,
+        stapleId: stapleId,
+        shapedCode: shapedCode,
+        shapedTitle: shapedTitle,
+        tiedDate: tiedDate,
+        totalLength: totalLength,
+        cuttingLength: cuttingLength,
+        qualityLevel: qualityLevel,
+        threadColor: threadColor,
+        vendor: vendor,
+        photosBase64: photosBase64,
+        logs: [
+          ScrapeLog(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            date: dateStr,
+            level: qualityLevel,
+            cuttingLength: cuttingLength,
+            memo: initialMemo,
+          ),
+        ],
+      );
+      currentWorkReeds.insert(0, newWorkReed);
+      await prefs.setString(
+        'work_leads_data',
+        jsonEncode(currentWorkReeds.map((e) => e.toJson()).toList()),
+      );
+    }
+
+    // ★ 自身の画面の状態を最新に更新
+    await _loadWorkReeds();
+
+    if (mounted) {
+      // 調整部屋（インデックス0）へ移動
+      MainRootPage.switchPage(context, 0);
+    }
   }
 
   void _confirmAndDismantle(WorkReed reed) {
@@ -159,6 +232,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       List<StapleStock> staples = decoded.map((e) => StapleStock.fromJson(e)).toList();
       
       bool updated = false;
+
+      // 1. 完全一致（id同士）で検索
       for (var st in staples) {
         if (st.id == reed.stapleId) {
           st.status = StapleStatus.unused;
@@ -166,11 +241,30 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
           break;
         }
       }
+
+      // 2. もし ID で一致しなかった場合のフォールバック検索（displayTitle やモデル表記からの照合）
+      if (!updated) {
+        for (var st in staples) {
+          if (st.status == StapleStatus.unused &&
+              (reed.shapedTitle.contains(st.model) || reed.stapleId.contains(st.model))) {
+            st.status = StapleStatus.unused;
+            updated = true;
+            break;
+          }
+        }
+      }
+
       if (updated) {
         await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('リードを分解しました。チューブを未使用ストックへ戻しました。')),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('リードを分解しました。（対象チューブID: ${reed.stapleId} が見つかりませんでした）')),
           );
         }
       }
@@ -492,7 +586,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     final combinedThreadColor = '$selectedType$selectedColor';
 
                     if (existingReed == null) {
-                      final newStapleId = DateTime.now().microsecondsSinceEpoch.toString();
+                      final uniqueId = DateTime.now().microsecondsSinceEpoch.toString();
                       final prefs = await SharedPreferences.getInstance();
                       final stapleJson = prefs.getString('staple_stocks');
                       List<StapleStock> staples = [];
@@ -502,9 +596,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       }
                       
                       staples.add(StapleStock(
-                        id: newStapleId,
-                        brand: selectedModel.contains(' ') ? selectedModel.split(' ').first : selectedModel,
-                        model: selectedModel.contains(' ') ? selectedModel.split(' ').last : '',
+                        id: uniqueId,
+                        model: selectedModel,
                         length: lengthController.text,
                         mark: markController.text,
                         status: StapleStatus.tied,
@@ -512,31 +605,23 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       ));
                       await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
 
-                      final newReed = WorkReed(
-                        id: DateTime.now().microsecondsSinceEpoch.toString(),
-                        stapleId: newStapleId,
-                        shapedCode: 'ダイレクト登録',
+                      Navigator.pop(context);
+                      await _registerAndMoveToWork(
+                        id: uniqueId,
+                        stapleId: uniqueId,
+                        shapedCode: previewId,
                         shapedTitle: shapedTitleText,
                         tiedDate: dateStr,
                         totalLength: 73.0,
                         cuttingLength: totalLengthController.text,
                         qualityLevel: qualityLevel,
                         threadColor: combinedThreadColor,
+                        vendor: null,
                         photosBase64: photos,
-                        logs: [
-                          if (memoController.text.isNotEmpty)
-                            ScrapeLog(
-                              id: DateTime.now().microsecondsSinceEpoch.toString(),
-                              date: dateStr,
-                              level: qualityLevel,
-                              cuttingLength: totalLengthController.text,
-                              memo: '【初期登録】 ${memoController.text}',
-                            ),
-                        ],
+                        initialMemo: memoController.text.isNotEmpty 
+                            ? '【初期登録】 ${memoController.text}' 
+                            : 'ダイレクト新規登録',
                       );
-                      setState(() {
-                        _workReeds.insert(0, newReed);
-                      });
                     } else {
                       setState(() {
                         existingReed.shapedTitle = shapedTitleText;
@@ -545,12 +630,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                         existingReed.threadColor = combinedThreadColor;
                         existingReed.photosBase64 = photos;
                       });
+                      _saveWorkReeds();
+                      Navigator.pop(context);
                     }
-                    _saveWorkReeds();
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(existingReed == null ? 'リードを登録しました' : 'リード情報を更新しました')),
-                    );
+
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(existingReed == null ? 'リードを登録しました' : 'リード情報を更新しました')),
+                      );
+                    }
                   },
                   child: const Text('保存'),
                 ),

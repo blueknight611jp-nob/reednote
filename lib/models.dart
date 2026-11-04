@@ -248,7 +248,6 @@ enum StapleStatus {
 
 class StapleStock {
   String id;
-  String brand;
   String model;
   String length;
   String mark;
@@ -258,7 +257,6 @@ class StapleStock {
 
   StapleStock({
     required this.id,
-    required this.brand,
     required this.model,
     required this.length,
     required this.mark,
@@ -267,12 +265,10 @@ class StapleStock {
     this.memo,
   });
 
-  String get shortBrand => brand.length > 3 ? brand.substring(0, 3) : brand;
-  String get displayTitle => '$brand $model ($length)';
+  String get displayTitle => '$model ($length)';
 
   Map<String, dynamic> toJson() => {
         'id': id,
-        'brand': brand,
         'model': model,
         'length': length,
         'mark': mark,
@@ -284,7 +280,6 @@ class StapleStock {
   factory StapleStock.fromJson(Map<String, dynamic> json) {
     return StapleStock(
       id: json['id'] ?? '',
-      brand: json['brand'] ?? '',
       model: json['model'] ?? '',
       length: json['length'] ?? '',
       mark: json['mark'] ?? '',
@@ -363,7 +358,7 @@ class WorkReedLog {
   String date;
   int qualityLevel;
   int? level;
-  String? cuttingLength; // ★ カット長・調整中の長さ
+  String? cuttingLength; 
   String? resistanceRating;
   String? pitchRating;
   String comment;
@@ -416,8 +411,8 @@ class WorkReed {
   String shapedCode;
   String shapedTitle;
   String tiedDate;
-  double totalLength;    // ★ 糸巻き時の全長
-  String cuttingLength;  // ★ カット後の使用長・現在の長さ
+  double totalLength;    
+  String cuttingLength;  
   int qualityLevel;
   String? threadColor;
   String? threadMaterial;

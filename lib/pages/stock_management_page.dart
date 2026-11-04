@@ -39,9 +39,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
     list.sort((a, b) {
-      int c = b.brand.compareTo(a.brand);
-      if (c != 0) return c;
-      c = b.model.compareTo(a.model);
+      int c = b.model.compareTo(a.model);
       if (c != 0) return c;
       c = b.length.compareTo(a.length);
       if (c != 0) return c;
@@ -136,7 +134,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       builder: (context) {
         final staple = stapleStocks.firstWhere(
           (s) => s.id == tied.stapleId,
-          orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+          orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
         );
 
         return AlertDialog(
@@ -230,15 +228,19 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     }
   }
 
-
   List<String> _getAllExistingBrands() {
     Set<String> brands = {'Rigotti', 'Tchankaya', 'Alliaud', 'Chiarugi', 'Loree', 'Glotin', 'Guercio'};
     for (var t in _tubeStocks) { if (t.brand.isNotEmpty) brands.add(t.brand); }
     for (var s in _splitStocks) { if (s.brand.isNotEmpty) brands.add(s.brand); }
     for (var g in _gougedStocks) { if (g.brand.isNotEmpty) brands.add(g.brand); }
     for (var sh in _shapedStocks) { if (sh.brand.isNotEmpty) brands.add(sh.brand); }
-    for (var st in stapleStocks) { if (st.brand.isNotEmpty) brands.add(st.brand); }
     return brands.toList();
+  }
+
+  List<String> _getAllExistingModels() {
+    Set<String> models = {'Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree'};
+    for (var st in stapleStocks) { if (st.model.isNotEmpty) models.add(st.model); }
+    return models.toList();
   }
 
   List<String> _getAllExistingVendors() {
@@ -371,6 +373,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   void _openAddDialogForCurrentTab() {
     final existingBrands = _getAllExistingBrands();
+    final existingModels = _getAllExistingModels();
     final existingPeriods = _getAllExistingPeriods();
     final existingVendors = _getAllExistingVendors();
 
@@ -422,7 +425,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       case 4:
         StockDialogs.showAddStapleDialog(
           context: context,
-          existingBrands: existingBrands,
+          existingModels: existingModels,
           onRegistered: (newStaples) { setState(() => stapleStocks.addAll(newStaples)); _saveData(); },
         );
         break;
@@ -826,7 +829,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                               style: const TextStyle(color: Colors.black, fontSize: 16),
                               children: [
                                 TextSpan(
-                                  text: '${item.brand} ${item.model} ${item.length} ', 
+                                  text: '${item.model} ${item.length} ', 
                                   style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
                                 ),
                                 TextSpan(
@@ -868,7 +871,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                           onPressed: () => StockDialogs.showEditStapleDialog(
                             context: context,
                             staple: item,
-                            existingBrands: _getAllExistingBrands(),
+                            existingModels: _getAllExistingModels(),
                             onSaved: () {
                               setState(() {});
                               _saveData();
@@ -896,7 +899,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildTiedStockTab() {
-    // ★ ソート処理の適用
     List<TiedStock> sortedItems = List.from(_tiedStocks);
     if (_tiedSortOrder == 'color') {
       sortedItems.sort((a, b) => (a.threadColor ?? '').compareTo(b.threadColor ?? ''));
@@ -912,7 +914,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
     return Column(
       children: [
-        // ★ ソート切り替え用プルダウンのヘッダー行
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -951,7 +952,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
                     final staple = stapleStocks.firstWhere(
                       (s) => s.id == item.stapleId,
-                      orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+                      orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
                     );
 
                     return Card(
@@ -963,13 +964,12 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // 1段目：チューブ情報（ブランド・モデル・長さのみ） ＋ コピー・編集・削除ボタン
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Expanded(
                                   child: Text(
-                                    'チューブ: ${staple.brand}${staple.model}${staple.length}${staple.mark}',
+                                    'チューブ: ${staple.model} ${staple.length}mm (${staple.mark})',
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 16,
@@ -993,14 +993,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                           onSaved: (copiedTied, selectedStaple, oldStaple) {
                                             setState(() {
                                               _tiedStocks.insert(0, copiedTied);
-                                              selectedStaple.status = StapleStatus.tied; // 選択したチューブを使用中に変更
+                                              selectedStaple.status = StapleStatus.tied;
                                             });
                                             _saveData();
                                           },
                                         );
                                       },
                                     ),
-                                    // 編集ボタン側も同様にチューブ変更に対応させる場合
                                     IconButton(
                                       icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
                                       tooltip: '糸巻きストックを編集',
@@ -1013,7 +1012,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                           onSaved: (updatedTied, selectedStaple, oldStaple) {
                                             setState(() {
                                               selectedStaple.status = StapleStatus.tied;
-                                              // チューブが変更された場合、古いチューブを未使用に戻す
                                               if (oldStaple != null && oldStaple.id != selectedStaple.id) {
                                                 oldStaple.status = StapleStatus.unused;
                                               }
@@ -1023,7 +1021,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                         );
                                       },
                                     ),
-                                    // 削除ボタン
                                     IconButton(
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                       tooltip: '糸巻きストックを削除',
@@ -1037,8 +1034,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                               ],
                             ),
                             const Divider(height: 16),
-                            
-                            // 2段目：ケーン情報
                             Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
@@ -1054,8 +1049,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                               ],
                             ),
                             const SizedBox(height: 6),
-                            
-                            // 3段目：糸巻き情報（糸巻き日・糸の色・糸の種類・全長を同レベルで表示）
                             Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               spacing: 8,
@@ -1081,15 +1074,11 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                 ],
                               ],
                             ),
-                            
-                            // 4段目：メモ
                             if (item.memo != null && item.memo!.isNotEmpty) ...[
                               const SizedBox(height: 4),
                               Text('メモ: ${item.memo}', style: TextStyle(color: Colors.grey.shade700)),
                             ],
                             const SizedBox(height: 12),
-                            
-                            // 5段目：アクションボタン
                             Align(
                               alignment: Alignment.centerRight,
                               child: isWorking
