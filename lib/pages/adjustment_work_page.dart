@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models.dart';
 import '../utils/helpers.dart';
 import '../utils/reed_id_utils.dart';
+import '../utils/dismantle_helper.dart';
 import '../main.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
@@ -249,46 +250,26 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     await _saveWorkReeds();
 
     final prefs = await SharedPreferences.getInstance();
+    final result = await DismantleHelper.dismantleReed(reed: reed, prefs: prefs);
+
+    // メモリ上のチューブストック一覧を再同期
     final stapleJson = prefs.getString('staple_stocks');
     if (stapleJson != null) {
       final List decoded = jsonDecode(stapleJson);
-      List<StapleStock> staples = decoded.map((e) => StapleStock.fromJson(e)).toList();
-      
-      bool updated = false;
+      _stapleStocks = decoded.map((e) => StapleStock.fromJson(e)).toList();
+    }
 
-      for (var st in staples) {
-        if (st.id == reed.stapleId) {
-          st.status = StapleStatus.unused;
-          updated = true;
-          break;
-        }
-      }
-
-      if (!updated) {
-        for (var st in staples) {
-          if (st.status == StapleStatus.unused &&
-              (reed.shapedTitle.contains(st.model) || reed.stapleId.contains(st.model))) {
-            st.status = StapleStatus.unused;
-            updated = true;
-            break;
-          }
-        }
-      }
-
-      if (updated) {
-        await prefs.setString('staple_stocks', jsonEncode(staples.map((e) => e.toJson()).toList()));
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('リードを分解しました。チューブを未使用ストックへ戻しました。')),
-          );
-        }
+    if (mounted) {
+      if (result.stapleUpdated) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('リードを分解しました。チューブ「${result.stapleInfo}」を未使用ストックへ戻しました。')),
+        );
       } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('リードを分解しました。（対象チューブID: ${reed.stapleId} が見つかりませんでした）')),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('リードを分解しました。（紐づくチューブ [ID: ${reed.stapleId}] が見つかりませんでした）')),
+        );
       }
+      setState(() {});
     }
   }
 
