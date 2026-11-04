@@ -33,6 +33,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   String? _highlightedId; // 現在ハイライトされているアイテムのID
   Timer? _highlightTimer;   // ハイライトを消すためのタイマー
 
+  // ★ 糸巻きタブ用のソート順（初期値：糸の色順）
+  String _tiedSortOrder = 'color';
+
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
     list.sort((a, b) {
@@ -852,180 +855,224 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   }
 
   Widget _buildTiedStockTab() {
-    List<TiedStock> items = List.from(_tiedStocks);
-    items.sort((a, b) => b.id.compareTo(a.id));
+    // ★ ソート処理の適用
+    List<TiedStock> sortedItems = List.from(_tiedStocks);
+    if (_tiedSortOrder == 'color') {
+      sortedItems.sort((a, b) => (a.threadColor ?? '').compareTo(b.threadColor ?? ''));
+    } else if (_tiedSortOrder == 'date_desc') {
+      sortedItems.sort((a, b) => b.tiedDate.compareTo(a.tiedDate));
+    } else if (_tiedSortOrder == 'date_asc') {
+      sortedItems.sort((a, b) => a.tiedDate.compareTo(b.tiedDate));
+    } else if (_tiedSortOrder == 'reed_id') {
+      sortedItems.sort((a, b) => a.id.compareTo(b.id));
+    } else if (_tiedSortOrder == 'cane_id') {
+      sortedItems.sort((a, b) => a.shapedCode.compareTo(b.shapedCode));
+    }
 
-    if (items.isEmpty) return const Center(child: Text('糸巻き(Tied)されたリードがありません'));
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
-        final item = items[i];
-        final bool isWorking = _workingReedIds.contains(item.id);
-        final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
-
-        final staple = stapleStocks.firstWhere(
-          (s) => s.id == item.stapleId,
-          orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
-        );
-
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          color: isHighlighted ? Colors.amber.shade100 : null,
-          elevation: isHighlighted ? 6 : 1,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1段目：チューブ情報（ブランド・モデル・長さのみ） ＋ コピー・編集・削除ボタン
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'チューブ: ${staple.brand}${staple.model}${staple.length}${staple.mark}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: Colors.deepOrange,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.copy_outlined, color: Colors.blueGrey),
-                          tooltip: '糸巻きストックを複製',
-                          onPressed: () {
-                            StockDialogs.showEditTiedDialog(
-                              context: context,
-                              tied: item,
-                              allStaples: stapleStocks,
-                              isCopy: true,
-                              onSaved: (copiedTied, selectedStaple, oldStaple) {
-                                setState(() {
-                                  _tiedStocks.insert(0, copiedTied);
-                                  selectedStaple.status = StapleStatus.tied; // 選択したチューブを使用中に変更
-                                });
-                                _saveData();
-                              },
-                            );
-                          },
-                        ),
-                        // 編集ボタン側も同様にチューブ変更に対応させる場合
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
-                          tooltip: '糸巻きストックを編集',
-                          onPressed: () {
-                            StockDialogs.showEditTiedDialog(
-                              context: context,
-                              tied: item,
-                              allStaples: stapleStocks,
-                              isCopy: false,
-                              onSaved: (updatedTied, selectedStaple, oldStaple) {
-                                setState(() {
-                                  selectedStaple.status = StapleStatus.tied;
-                                  // チューブが変更された場合、古いチューブを未使用に戻す
-                                  if (oldStaple != null && oldStaple.id != selectedStaple.id) {
-                                    oldStaple.status = StapleStatus.unused;
-                                  }
-                                });
-                                _saveData();
-                              },
-                            );
-                          },
-                        ),
-                        // 削除ボタン
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          tooltip: '糸巻きストックを削除',
-                          onPressed: () => _confirmDelete(() {
-                            setState(() => _tiedStocks.remove(item));
-                            _saveData();
-                          }),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const Divider(height: 16),
-                
-                // 2段目：ケーン情報
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text('ケーン: ${item.shapedTitle}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
-                    const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                    ReedIdUtils.buildClickableIdParts(
-                      context,
-                      item.shapedCode,
-                      _tabController,
-                      onJumpAndHighlight: _jumpAndHighlight,
-                    ),
-                    const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                
-                // 3段目：糸巻き情報（糸巻き日・糸の色・糸の種類・全長を同レベルで表示）
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text('糸巻き日: ${item.tiedDate}'),
-                    if (item.threadColor != null && item.threadColor!.isNotEmpty) ...[
-                      const Text('| 糸:'),
-                      Container(
-                        width: 12,
-                        height: 12,
-                        decoration: BoxDecoration(
-                          color: getThreadColor(item.threadColor),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      Text('${item.threadColor}'),
-                    ],
-                    Text('| 種類: ${item.threadMaterial ?? "ナイロン"}'),
-                    Text('| 全長: ${item.totalLength} mm'),
-                    if (item.vendor != null && item.vendor!.isNotEmpty) ...[
-                      Text('| 購入先: ${item.vendor}'),
-                    ],
-                  ],
-                ),
-                
-                // 4段目：メモ
-                if (item.memo != null && item.memo!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text('メモ: ${item.memo}', style: TextStyle(color: Colors.grey.shade700)),
+    return Column(
+      children: [
+        // ★ ソート切り替え用プルダウンのヘッダー行
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _tiedSortOrder,
+                items: const [
+                  DropdownMenuItem(value: 'color', child: Text('糸の色順')),
+                  DropdownMenuItem(value: 'date_desc', child: Text('糸巻き日 (新しい順)')),
+                  DropdownMenuItem(value: 'date_asc', child: Text('糸巻き日 (古い順)')),
+                  DropdownMenuItem(value: 'reed_id', child: Text('リードID順')),
+                  DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
                 ],
-                const SizedBox(height: 12),
-                
-                // 5段目：アクションボタン
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: isWorking
-                      ? ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade300, foregroundColor: Colors.grey.shade700),
-                          icon: const Icon(Icons.check_circle, size: 18),
-                          label: const Text('作業中 (ページ1へ登録済み)'),
-                          onPressed: null,
-                        )
-                      : ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
-                          icon: const Icon(Icons.content_cut, size: 18),
-                          label: const Text('管理・調整部屋へ登録'),
-                          onPressed: () => _confirmAndSendToCutAndScrape(item),
-                        ),
-                ),
-              ],
-            ),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _tiedSortOrder = val);
+                  }
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: sortedItems.isEmpty 
+              ? const Center(child: Text('糸巻き(Tied)されたリードがありません')) 
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  itemCount: sortedItems.length,
+                  itemBuilder: (context, i) {
+                    final item = sortedItems[i];
+                    final bool isWorking = _workingReedIds.contains(item.id);
+                    final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
+
+                    final staple = stapleStocks.firstWhere(
+                      (s) => s.id == item.stapleId,
+                      orElse: () => StapleStock(id: '', brand: '不明', model: '', length: '', mark: ''),
+                    );
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: isHighlighted ? Colors.amber.shade100 : null,
+                      elevation: isHighlighted ? 6 : 1,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // 1段目：チューブ情報（ブランド・モデル・長さのみ） ＋ コピー・編集・削除ボタン
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'チューブ: ${staple.brand}${staple.model}${staple.length}${staple.mark}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                      color: Colors.deepOrange,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.copy_outlined, color: Colors.blueGrey),
+                                      tooltip: '糸巻きストックを複製',
+                                      onPressed: () {
+                                        StockDialogs.showEditTiedDialog(
+                                          context: context,
+                                          tied: item,
+                                          allStaples: stapleStocks,
+                                          isCopy: true,
+                                          onSaved: (copiedTied, selectedStaple, oldStaple) {
+                                            setState(() {
+                                              _tiedStocks.insert(0, copiedTied);
+                                              selectedStaple.status = StapleStatus.tied; // 選択したチューブを使用中に変更
+                                            });
+                                            _saveData();
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    // 編集ボタン側も同様にチューブ変更に対応させる場合
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                                      tooltip: '糸巻きストックを編集',
+                                      onPressed: () {
+                                        StockDialogs.showEditTiedDialog(
+                                          context: context,
+                                          tied: item,
+                                          allStaples: stapleStocks,
+                                          isCopy: false,
+                                          onSaved: (updatedTied, selectedStaple, oldStaple) {
+                                            setState(() {
+                                              selectedStaple.status = StapleStatus.tied;
+                                              // チューブが変更された場合、古いチューブを未使用に戻す
+                                              if (oldStaple != null && oldStaple.id != selectedStaple.id) {
+                                                oldStaple.status = StapleStatus.unused;
+                                              }
+                                            });
+                                            _saveData();
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    // 削除ボタン
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      tooltip: '糸巻きストックを削除',
+                                      onPressed: () => _confirmDelete(() {
+                                        setState(() => _tiedStocks.remove(item));
+                                        _saveData();
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 16),
+                            
+                            // 2段目：ケーン情報
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('ケーン: ${item.shapedTitle}  ', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                                ReedIdUtils.buildClickableIdParts(
+                                  context,
+                                  item.shapedCode,
+                                  _tabController,
+                                  onJumpAndHighlight: _jumpAndHighlight,
+                                ),
+                                const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            
+                            // 3段目：糸巻き情報（糸巻き日・糸の色・糸の種類・全長を同レベルで表示）
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                Text('糸巻き日: ${item.tiedDate}'),
+                                if (item.threadColor != null && item.threadColor!.isNotEmpty) ...[
+                                  const Text('| 糸:'),
+                                  Container(
+                                    width: 12,
+                                    height: 12,
+                                    decoration: BoxDecoration(
+                                      color: getThreadColor(item.threadColor),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  Text('${item.threadColor}'),
+                                ],
+                                Text('| 種類: ${item.threadMaterial ?? "ナイロン"}'),
+                                Text('| 全長: ${item.totalLength} mm'),
+                                if (item.vendor != null && item.vendor!.isNotEmpty) ...[
+                                  Text('| 購入先: ${item.vendor}'),
+                                ],
+                              ],
+                            ),
+                            
+                            // 4段目：メモ
+                            if (item.memo != null && item.memo!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text('メモ: ${item.memo}', style: TextStyle(color: Colors.grey.shade700)),
+                            ],
+                            const SizedBox(height: 12),
+                            
+                            // 5段目：アクションボタン
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: isWorking
+                                  ? ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.grey.shade300, foregroundColor: Colors.grey.shade700),
+                                      icon: const Icon(Icons.check_circle, size: 18),
+                                      label: const Text('作業中 (ページ1へ登録済み)'),
+                                      onPressed: null,
+                                    )
+                                  : ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade800, foregroundColor: Colors.white),
+                                      icon: const Icon(Icons.content_cut, size: 18),
+                                      label: const Text('管理・調整部屋へ登録'),
+                                      onPressed: () => _confirmAndSendToCutAndScrape(item),
+                                    ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
