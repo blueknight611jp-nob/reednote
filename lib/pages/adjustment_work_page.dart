@@ -27,6 +27,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   late TabController _subTabController;
 
   final List<int> _levels = [1, 2, 3, 4, 5];
+  String _sortOrder = 'log_date_desc'; // ソート順 (デフォルト: ログの日時 新しい順)
 
   @override
   void initState() {
@@ -76,9 +77,35 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       _stapleStocks = decoded.map((e) => StapleStock.fromJson(e)).toList();
     }
 
+    // 保存されているソート順の読み込み
+    final savedSort = prefs.getString('work_leads_sort_order');
+    if (savedSort != null) {
+      _sortOrder = savedSort;
+    }
+
     if (mounted) {
       setState(() {});
     }
+  }
+
+  void _setSortOrder(String newSort) {
+    setState(() {
+      _sortOrder = newSort;
+    });
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString('work_leads_sort_order', newSort);
+    });
+  }
+
+  String _getStapleModel(WorkReed reed) {
+    final staple = _stapleStocks.firstWhere(
+      (s) => s.id == reed.stapleId,
+      orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+    );
+    if (staple.model.isNotEmpty) {
+      return '${staple.model} ${staple.length}${staple.mark}';
+    }
+    return reed.shapedTitle;
   }
 
   Future<void> _saveWorkReeds() async {
@@ -988,21 +1015,106 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   }
 
   Widget _buildReedList(int level) {
-    final reeds = _workReeds.where((l) => l.qualityLevel == level).toList();
+    List<WorkReed> reeds = _workReeds.where((l) => l.qualityLevel == level).toList();
 
-    if (reeds.isEmpty) {
-      return Center(
-        child: Text(
-          '「Lv.$level」のリードはありません',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+    // ソート処理
+    reeds.sort((a, b) {
+      switch (_sortOrder) {
+        case 'log_date_desc':
+          final aDate = a.logs.isNotEmpty ? a.logs.first.date : '';
+          final bDate = b.logs.isNotEmpty ? b.logs.first.date : '';
+          if (aDate.isEmpty && bDate.isNotEmpty) return 1;
+          if (aDate.isNotEmpty && bDate.isEmpty) return -1;
+          int cmp = bDate.compareTo(aDate);
+          if (cmp != 0) return cmp;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'log_date_asc':
+          final aDate = a.logs.isNotEmpty ? a.logs.first.date : '';
+          final bDate = b.logs.isNotEmpty ? b.logs.first.date : '';
+          if (aDate.isEmpty && bDate.isNotEmpty) return 1;
+          if (aDate.isNotEmpty && bDate.isEmpty) return -1;
+          int cmp = aDate.compareTo(bDate);
+          if (cmp != 0) return cmp;
+          return a.tiedDate.compareTo(b.tiedDate);
+
+        case 'model':
+          final aModel = _getStapleModel(a);
+          final bModel = _getStapleModel(b);
+          int cmp = aModel.compareTo(bModel);
+          if (cmp != 0) return cmp;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'cane_id':
+          final aCode = a.shapedCode.isNotEmpty ? a.shapedCode : a.id;
+          final bCode = b.shapedCode.isNotEmpty ? b.shapedCode : b.id;
+          int cmp = aCode.compareTo(bCode);
+          if (cmp != 0) return cmp;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'thread_color':
+          final aColor = a.threadColor ?? '';
+          final bColor = b.threadColor ?? '';
+          int cmp = aColor.compareTo(bColor);
+          if (cmp != 0) return cmp;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'tied_date_desc':
+          int cmp = b.tiedDate.compareTo(a.tiedDate);
+          if (cmp != 0) return cmp;
+          return b.id.compareTo(a.id);
+
+        case 'tied_date_asc':
+          int cmp = a.tiedDate.compareTo(b.tiedDate);
+          if (cmp != 0) return cmp;
+          return a.id.compareTo(b.id);
+
+        default:
+          return 0;
+      }
+    });
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _sortOrder,
+                items: const [
+                  DropdownMenuItem(value: 'log_date_desc', child: Text('ログの日時 (新しい順)')),
+                  DropdownMenuItem(value: 'log_date_asc', child: Text('ログの日時 (古い順)')),
+                  DropdownMenuItem(value: 'model', child: Text('モデル名順')),
+                  DropdownMenuItem(value: 'cane_id', child: Text('ケーンのID順')),
+                  DropdownMenuItem(value: 'thread_color', child: Text('糸の色順')),
+                  DropdownMenuItem(value: 'tied_date_desc', child: Text('登録日 (新しい順)')),
+                  DropdownMenuItem(value: 'tied_date_asc', child: Text('登録日 (古い順)')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    _setSortOrder(val);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.all(12),
-      itemCount: reeds.length,
-      itemBuilder: (context, index) {
+        Expanded(
+          child: reeds.isEmpty
+              ? Center(
+                  child: Text(
+                    '「Lv.$level」のリードはありません',
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: reeds.length,
+                  itemBuilder: (context, index) {
         final reed = reeds[index];
 
         // 対応するチューブ情報を取得
@@ -1286,6 +1398,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
           ),
         );
       },
-    );
+    ),
+  ),
+],
+);
   }
 }

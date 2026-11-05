@@ -33,7 +33,21 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   String? _highlightedId; // 現在ハイライトされているアイテムのID
   Timer? _highlightTimer;   // ハイライトを消すためのタイマー
 
-  String _tiedSortOrder = 'date_desc';
+  String _tubeSortOrder = 'cane_id';
+  String _splitSortOrder = 'cane_id';
+  String _gougedSortOrder = 'cane_id';
+  String _shapedSortOrder = 'cane_id';
+  String _stapleSortOrder = 'model';
+  String _tiedSortOrder = 'staple_full';
+
+  void _changeSortOrder(String prefKey, String newSort, void Function() apply) {
+    setState(() {
+      apply();
+    });
+    SharedPreferences.getInstance().then((prefs) {
+      prefs.setString(prefKey, newSort);
+    });
+  }
 
   List<StapleStock> getSortedStaples() {
     List<StapleStock> list = List.from(stapleStocks);
@@ -95,6 +109,19 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     if (stapleJson != null) stapleStocks = (jsonDecode(stapleJson) as List).map((e) => StapleStock.fromJson(e)).toList();
     final tiedJson = prefs.getString('tied_stocks');
     if (tiedJson != null) _tiedStocks = (jsonDecode(tiedJson) as List).map((e) => TiedStock.fromJson(e)).toList();
+
+    final tubeSort = prefs.getString('stock_sort_tube');
+    if (tubeSort != null) _tubeSortOrder = tubeSort;
+    final splitSort = prefs.getString('stock_sort_split');
+    if (splitSort != null) _splitSortOrder = splitSort;
+    final gougedSort = prefs.getString('stock_sort_gouged');
+    if (gougedSort != null) _gougedSortOrder = gougedSort;
+    final shapedSort = prefs.getString('stock_sort_shaped');
+    if (shapedSort != null) _shapedSortOrder = shapedSort;
+    final stapleSort = prefs.getString('stock_sort_staple');
+    if (stapleSort != null) _stapleSortOrder = stapleSort;
+    final tiedSort = prefs.getString('stock_sort_tied');
+    if (tiedSort != null) _tiedSortOrder = tiedSort;
 
     setState(() { _isLoading = false; });
   }
@@ -628,48 +655,75 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     required IconData processButtonIcon,
     required VoidCallback Function(T) onProcess,
     required String emptyMessage,
+    required String sortOrder,
+    required List<DropdownMenuItem<String>> sortOptions,
+    required ValueChanged<String> onSortChanged,
+    required void Function(List<T> list, String sortOrder) sortFunction,
   }) {
     List<T> filteredItems = _showOnlyInStock 
         ? items.where((e) => getCount(e) > 0).toList() 
         : List.from(items);
     
-    filteredItems.sort((a, b) => getCode(b).compareTo(getCode(a)));
+    sortFunction(filteredItems, sortOrder);
 
-    if (filteredItems.isEmpty) return Center(child: Text(emptyMessage));
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: filteredItems.length,
-      itemBuilder: (context, i) {
-        final item = filteredItems[i];
-        final count = getCount(item);
-        final itemId = getId(item);
-        final bool isHighlighted = _highlightedId != null && itemId.contains(_highlightedId!);
-
-        return _buildStockCard(
-          displayTitle: getDisplayTitle(item),
-          fullId: itemId,
-          subtitle: getSubtitle(item),
-          count: count,
-          isHighlighted: isHighlighted,
-          onIncrement: () { setState(() => setCount(item, count + 1)); _saveData(); },
-          onDecrement: () { setState(() => setCount(item, count - 1)); _saveData(); },
-          onEdit: () => StockDialogs.showEditCaneDialog(
-            context: context,
-            stock: item,
-            existingBrands: _getAllExistingBrands(),
-            existingVendors: _getAllExistingVendors(),
-            onSaved: () { setState(() {}); _saveData(); },
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: sortOrder,
+                items: sortOptions,
+                onChanged: (val) {
+                  if (val != null) onSortChanged(val);
+                },
+              ),
+            ],
           ),
-          onDelete: onDelete(item),
-          processButton: ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
-            icon: Icon(processButtonIcon, size: 16),
-            label: Text(processButtonLabel),
-            onPressed: onProcess(item),
-          ),
-        );
-      },
+        ),
+        Expanded(
+          child: filteredItems.isEmpty
+              ? Center(child: Text(emptyMessage))
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  itemCount: filteredItems.length,
+                  itemBuilder: (context, i) {
+                    final item = filteredItems[i];
+                    final count = getCount(item);
+                    final itemId = getId(item);
+                    final bool isHighlighted = _highlightedId != null && itemId.contains(_highlightedId!);
+
+                    return _buildStockCard(
+                      displayTitle: getDisplayTitle(item),
+                      fullId: itemId,
+                      subtitle: getSubtitle(item),
+                      count: count,
+                      isHighlighted: isHighlighted,
+                      onIncrement: () { setState(() => setCount(item, count + 1)); _saveData(); },
+                      onDecrement: () { setState(() => setCount(item, count - 1)); _saveData(); },
+                      onEdit: () => StockDialogs.showEditCaneDialog(
+                        context: context,
+                        stock: item,
+                        existingBrands: _getAllExistingBrands(),
+                        existingVendors: _getAllExistingVendors(),
+                        onSaved: () { setState(() {}); _saveData(); },
+                      ),
+                      onDelete: onDelete(item),
+                      processButton: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(backgroundColor: Colors.amber.shade100, foregroundColor: Colors.amber.shade900, elevation: 0),
+                        icon: Icon(processButtonIcon, size: 16),
+                        label: Text(processButtonLabel),
+                        onPressed: onProcess(item),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
     );
   }
 
@@ -697,6 +751,35 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         },
       ),
       emptyMessage: '表示する丸材ストックがありません',
+      sortOrder: _tubeSortOrder,
+      sortOptions: const [
+        DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
+        DropdownMenuItem(value: 'purchase_desc', child: Text('購入日 (新しい順)')),
+        DropdownMenuItem(value: 'purchase_asc', child: Text('購入日 (古い順)')),
+        DropdownMenuItem(value: 'process_desc', child: Text('加工日 (新しい順)')),
+        DropdownMenuItem(value: 'process_asc', child: Text('加工日 (古い順)')),
+        DropdownMenuItem(value: 'diameter', child: Text('太さ順')),
+        DropdownMenuItem(value: 'count_desc', child: Text('在庫数 (多い順)')),
+        DropdownMenuItem(value: 'count_asc', child: Text('在庫数 (少ない順)')),
+        DropdownMenuItem(value: 'vendor', child: Text('購入先順')),
+      ],
+      onSortChanged: (newSort) => _changeSortOrder('stock_sort_tube', newSort, () => _tubeSortOrder = newSort),
+      sortFunction: (list, order) {
+        list.sort((a, b) {
+          switch (order) {
+            case 'cane_id': return b.code.compareTo(a.code);
+            case 'purchase_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'purchase_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'process_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'process_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'diameter': return a.diameter.compareTo(b.diameter);
+            case 'count_desc': return b.remainingCount.compareTo(a.remainingCount);
+            case 'count_asc': return a.remainingCount.compareTo(b.remainingCount);
+            case 'vendor': return (a.vendor ?? '').compareTo(b.vendor ?? '');
+            default: return b.code.compareTo(a.code);
+          }
+        });
+      },
     );
   }
 
@@ -724,6 +807,33 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         },
       ),
       emptyMessage: '表示する半カマボコストックがありません',
+      sortOrder: _splitSortOrder,
+      sortOptions: const [
+        DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
+        DropdownMenuItem(value: 'purchase_desc', child: Text('購入日 (新しい順)')),
+        DropdownMenuItem(value: 'purchase_asc', child: Text('購入日 (古い順)')),
+        DropdownMenuItem(value: 'process_desc', child: Text('加工日 (新しい順)')),
+        DropdownMenuItem(value: 'process_asc', child: Text('加工日 (古い順)')),
+        DropdownMenuItem(value: 'diameter', child: Text('太さ順')),
+        DropdownMenuItem(value: 'count_desc', child: Text('在庫数 (多い順)')),
+        DropdownMenuItem(value: 'count_asc', child: Text('在庫数 (少ない順)')),
+      ],
+      onSortChanged: (newSort) => _changeSortOrder('stock_sort_split', newSort, () => _splitSortOrder = newSort),
+      sortFunction: (list, order) {
+        list.sort((a, b) {
+          switch (order) {
+            case 'cane_id': return b.code.compareTo(a.code);
+            case 'purchase_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'purchase_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'process_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'process_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'diameter': return a.diameter.compareTo(b.diameter);
+            case 'count_desc': return b.remainingCount.compareTo(a.remainingCount);
+            case 'count_asc': return a.remainingCount.compareTo(b.remainingCount);
+            default: return b.code.compareTo(a.code);
+          }
+        });
+      },
     );
   }
 
@@ -751,6 +861,37 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         },
       ),
       emptyMessage: '表示するカマボコストックがありません',
+      sortOrder: _gougedSortOrder,
+      sortOptions: const [
+        DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
+        DropdownMenuItem(value: 'purchase_desc', child: Text('購入日 (新しい順)')),
+        DropdownMenuItem(value: 'purchase_asc', child: Text('購入日 (古い順)')),
+        DropdownMenuItem(value: 'process_desc', child: Text('加工日 (新しい順)')),
+        DropdownMenuItem(value: 'process_asc', child: Text('加工日 (古い順)')),
+        DropdownMenuItem(value: 'diameter', child: Text('太さ順')),
+        DropdownMenuItem(value: 'count_desc', child: Text('在庫数 (多い順)')),
+        DropdownMenuItem(value: 'count_asc', child: Text('在庫数 (少ない順)')),
+        DropdownMenuItem(value: 'thickness_asc', child: Text('ガウジング厚さ (薄い順)')),
+        DropdownMenuItem(value: 'thickness_desc', child: Text('ガウジング厚さ (厚い順)')),
+      ],
+      onSortChanged: (newSort) => _changeSortOrder('stock_sort_gouged', newSort, () => _gougedSortOrder = newSort),
+      sortFunction: (list, order) {
+        list.sort((a, b) {
+          switch (order) {
+            case 'cane_id': return b.code.compareTo(a.code);
+            case 'purchase_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'purchase_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'process_desc': return b.gougingDate.compareTo(a.gougingDate);
+            case 'process_asc': return a.gougingDate.compareTo(b.gougingDate);
+            case 'diameter': return a.diameter.compareTo(b.diameter);
+            case 'count_desc': return b.remainingCount.compareTo(a.remainingCount);
+            case 'count_asc': return a.remainingCount.compareTo(b.remainingCount);
+            case 'thickness_asc': return (a.thickness ?? 999.0).compareTo(b.thickness ?? 999.0);
+            case 'thickness_desc': return (b.thickness ?? 0.0).compareTo(a.thickness ?? 0.0);
+            default: return b.code.compareTo(a.code);
+          }
+        });
+      },
     );
   }
 
@@ -785,23 +926,110 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         );
       },
       emptyMessage: '表示する舟形ストックがありません',
+      sortOrder: _shapedSortOrder,
+      sortOptions: const [
+        DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
+        DropdownMenuItem(value: 'purchase_desc', child: Text('購入日 (新しい順)')),
+        DropdownMenuItem(value: 'purchase_asc', child: Text('購入日 (古い順)')),
+        DropdownMenuItem(value: 'process_desc', child: Text('加工日 (新しい順)')),
+        DropdownMenuItem(value: 'process_asc', child: Text('加工日 (古い順)')),
+        DropdownMenuItem(value: 'diameter', child: Text('太さ順')),
+        DropdownMenuItem(value: 'count_desc', child: Text('在庫数 (多い順)')),
+        DropdownMenuItem(value: 'count_asc', child: Text('在庫数 (少ない順)')),
+        DropdownMenuItem(value: 'shaper', child: Text('シェイパーの型順')),
+      ],
+      onSortChanged: (newSort) => _changeSortOrder('stock_sort_shaped', newSort, () => _shapedSortOrder = newSort),
+      sortFunction: (list, order) {
+        list.sort((a, b) {
+          switch (order) {
+            case 'cane_id': return b.code.compareTo(a.code);
+            case 'purchase_desc': return b.purchasePeriod.compareTo(a.purchasePeriod);
+            case 'purchase_asc': return a.purchasePeriod.compareTo(b.purchasePeriod);
+            case 'process_desc': return b.shapingDate.compareTo(a.shapingDate);
+            case 'process_asc': return a.shapingDate.compareTo(b.shapingDate);
+            case 'diameter': return a.diameter.compareTo(b.diameter);
+            case 'count_desc': return b.remainingCount.compareTo(a.remainingCount);
+            case 'count_asc': return a.remainingCount.compareTo(b.remainingCount);
+            case 'shaper': return a.shaper.compareTo(b.shaper);
+            default: return b.code.compareTo(a.code);
+          }
+        });
+      },
     );
   }
 
   Widget _buildStapleStockTab() {
-    final sortedList = getSortedStaples();
-    final items = _showOnlyInStock 
-        ? sortedList.where((e) => e.status == StapleStatus.unused).toList() 
-        : sortedList;
-      
-    if (items.isEmpty) {
-      return const Center(child: Text('表示するチューブ(Hülse)ストックがありません'));
+    List<StapleStock> items = List.from(stapleStocks);
+    if (_showOnlyInStock) {
+      items = items.where((e) => e.status == StapleStatus.unused).toList();
     }
-  
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
-      itemCount: items.length,
-      itemBuilder: (context, i) {
+
+    items.sort((a, b) {
+      switch (_stapleSortOrder) {
+        case 'model':
+          int c = a.model.compareTo(b.model);
+          if (c != 0) return c;
+          c = a.length.compareTo(b.length);
+          if (c != 0) return c;
+          return a.mark.compareTo(b.mark);
+        case 'length':
+          int c = a.length.compareTo(b.length);
+          if (c != 0) return c;
+          c = a.model.compareTo(b.model);
+          if (c != 0) return c;
+          return a.mark.compareTo(b.mark);
+        case 'status':
+          int c = a.status.index.compareTo(b.status.index);
+          if (c != 0) return c;
+          c = a.model.compareTo(b.model);
+          if (c != 0) return c;
+          return a.length.compareTo(b.length);
+        case 'mark':
+          int c = a.mark.compareTo(b.mark);
+          if (c != 0) return c;
+          c = a.model.compareTo(b.model);
+          if (c != 0) return c;
+          return a.length.compareTo(b.length);
+        default:
+          int c = a.model.compareTo(b.model);
+          if (c != 0) return c;
+          return a.length.compareTo(b.length);
+      }
+    });
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(width: 8),
+              DropdownButton<String>(
+                value: _stapleSortOrder,
+                items: const [
+                  DropdownMenuItem(value: 'model', child: Text('モデル順')),
+                  DropdownMenuItem(value: 'length', child: Text('長さ順')),
+                  DropdownMenuItem(value: 'status', child: Text('使用状況順 (未使用優先)')),
+                  DropdownMenuItem(value: 'mark', child: Text('マーク順')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    _changeSortOrder('stock_sort_staple', val, () => _stapleSortOrder = val);
+                  }
+                },
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: items.isEmpty
+              ? const Center(child: Text('表示するチューブ(Hülse)ストックがありません'))
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
+                  itemCount: items.length,
+                  itemBuilder: (context, i) {
         final item = items[i];
         final bool isUnused = item.status == StapleStatus.unused;
         final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
@@ -895,22 +1123,60 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           ),
         );
       },
-    );
+    ),
+  ),
+],
+);
   }
 
   Widget _buildTiedStockTab() {
     List<TiedStock> sortedItems = List.from(_tiedStocks);
-    if (_tiedSortOrder == 'color') {
-      sortedItems.sort((a, b) => (a.threadColor ?? '').compareTo(b.threadColor ?? ''));
-    } else if (_tiedSortOrder == 'date_desc') {
-      sortedItems.sort((a, b) => b.tiedDate.compareTo(a.tiedDate));
-    } else if (_tiedSortOrder == 'date_asc') {
-      sortedItems.sort((a, b) => a.tiedDate.compareTo(b.tiedDate));
-    } else if (_tiedSortOrder == 'reed_id') {
-      sortedItems.sort((a, b) => a.id.compareTo(b.id));
-    } else if (_tiedSortOrder == 'cane_id') {
-      sortedItems.sort((a, b) => a.shapedCode.compareTo(b.shapedCode));
-    }
+    sortedItems.sort((a, b) {
+      switch (_tiedSortOrder) {
+        case 'staple_full':
+          final aStaple = stapleStocks.firstWhere(
+            (s) => s.id == a.stapleId,
+            orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+          );
+          final bStaple = stapleStocks.firstWhere(
+            (s) => s.id == b.stapleId,
+            orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+          );
+          final aFull = '${aStaple.model} ${aStaple.length} ${aStaple.mark}';
+          final bFull = '${bStaple.model} ${bStaple.length} ${bStaple.mark}';
+          int c = aFull.compareTo(bFull);
+          if (c != 0) return c;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'cane_id':
+          int c = a.shapedCode.compareTo(b.shapedCode);
+          if (c != 0) return c;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'thread_material':
+          int c = (a.threadMaterial ?? '').compareTo(b.threadMaterial ?? '');
+          if (c != 0) return c;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'thread_color':
+          int c = (a.threadColor ?? '').compareTo(b.threadColor ?? '');
+          if (c != 0) return c;
+          return b.tiedDate.compareTo(a.tiedDate);
+
+        case 'date_desc':
+          int c = b.tiedDate.compareTo(a.tiedDate);
+          if (c != 0) return c;
+          return b.id.compareTo(a.id);
+
+        case 'date_asc':
+          int c = a.tiedDate.compareTo(b.tiedDate);
+          if (c != 0) return c;
+          return a.id.compareTo(b.id);
+
+        default:
+          return 0;
+      }
+    });
 
     return Column(
       children: [
@@ -924,15 +1190,16 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
               DropdownButton<String>(
                 value: _tiedSortOrder,
                 items: const [
-                  DropdownMenuItem(value: 'color', child: Text('糸の色順')),
+                  DropdownMenuItem(value: 'staple_full', child: Text('チューブ (モデル+長さ+マーク) 順')),
+                  DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
+                  DropdownMenuItem(value: 'thread_material', child: Text('糸の種類順')),
+                  DropdownMenuItem(value: 'thread_color', child: Text('糸の色順')),
                   DropdownMenuItem(value: 'date_desc', child: Text('糸巻き日 (新しい順)')),
                   DropdownMenuItem(value: 'date_asc', child: Text('糸巻き日 (古い順)')),
-                  DropdownMenuItem(value: 'reed_id', child: Text('リードID順')),
-                  DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順')),
                 ],
                 onChanged: (val) {
                   if (val != null) {
-                    setState(() => _tiedSortOrder = val);
+                    _changeSortOrder('stock_sort_tied', val, () => _tiedSortOrder = val);
                   }
                 },
               ),
