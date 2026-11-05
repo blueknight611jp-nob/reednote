@@ -86,29 +86,49 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final prefs = await SharedPreferences.getInstance();
     final jsonString = prefs.getString('work_leads_data');
     if (jsonString != null) {
-      final List decoded = jsonDecode(jsonString);
-      setState(() {
-        _workingReedIds = decoded.map((e) => e['id'].toString()).toSet();
-      });
+      try {
+        dynamic decoded = jsonDecode(jsonString);
+        if (decoded is String) decoded = jsonDecode(decoded);
+        if (decoded is List) {
+          setState(() {
+            _workingReedIds = Set<String>.from(decoded.map((e) => e['id'].toString()));
+          });
+        }
+      } catch (e) {
+        debugPrint('Error loading working reed ids: $e');
+      }
     }
+  }
+
+  /// 二重エンコード対策を含んだ安全なリストデコードヘルパー
+  List<T> _safeDecodeList<T>(SharedPreferences prefs, String key, T Function(Map<String, dynamic>) fromJson) {
+    final rawJson = prefs.getString(key);
+    if (rawJson == null || rawJson.isEmpty) return [];
+    try {
+      dynamic decoded = jsonDecode(rawJson);
+      // 二重シリアライズ（文字列の中にJSON文字列が入っている状態）を安全に解除
+      if (decoded is String) {
+        decoded = jsonDecode(decoded);
+      }
+      if (decoded is List) {
+        return decoded.map((e) => fromJson(Map<String, dynamic>.from(e as Map))).toList();
+      }
+    } catch (e) {
+      debugPrint('Error decoding $key: $e');
+    }
+    return [];
   }
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
     await _loadWorkingReedIds();
 
-    final tubeJson = prefs.getString('tube_stocks');
-    if (tubeJson != null) _tubeStocks = (jsonDecode(tubeJson) as List).map((e) => TubeStock.fromJson(e)).toList();
-    final splitJson = prefs.getString('split_stocks');
-    if (splitJson != null) _splitStocks = (jsonDecode(splitJson) as List).map((e) => SplitCaneStock.fromJson(e)).toList();
-    final gougedJson = prefs.getString('gouged_stocks');
-    if (gougedJson != null) _gougedStocks = (jsonDecode(gougedJson) as List).map((e) => GougedCaneStock.fromJson(e)).toList();
-    final shapedJson = prefs.getString('shaped_stocks');
-    if (shapedJson != null) _shapedStocks = (jsonDecode(shapedJson) as List).map((e) => ShapedCaneStock.fromJson(e)).toList();
-    final stapleJson = prefs.getString('staple_stocks');
-    if (stapleJson != null) stapleStocks = (jsonDecode(stapleJson) as List).map((e) => StapleStock.fromJson(e)).toList();
-    final tiedJson = prefs.getString('tied_stocks');
-    if (tiedJson != null) _tiedStocks = (jsonDecode(tiedJson) as List).map((e) => TiedStock.fromJson(e)).toList();
+    _tubeStocks = _safeDecodeList(prefs, 'tube_stocks', (json) => TubeStock.fromJson(json));
+    _splitStocks = _safeDecodeList(prefs, 'split_stocks', (json) => SplitCaneStock.fromJson(json));
+    _gougedStocks = _safeDecodeList(prefs, 'gouged_stocks', (json) => GougedCaneStock.fromJson(json));
+    _shapedStocks = _safeDecodeList(prefs, 'shaped_stocks', (json) => ShapedCaneStock.fromJson(json));
+    stapleStocks = _safeDecodeList(prefs, 'staple_stocks', (json) => StapleStock.fromJson(json));
+    _tiedStocks = _safeDecodeList(prefs, 'tied_stocks', (json) => TiedStock.fromJson(json));
 
     final tubeSort = prefs.getString('stock_sort_tube');
     if (tubeSort != null) _tubeSortOrder = tubeSort;
@@ -216,8 +236,15 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     final jsonString = prefs.getString('work_leads_data');
     List<WorkReed> currentWorkReeds = [];
     if (jsonString != null) {
-      final List decoded = jsonDecode(jsonString);
-      currentWorkReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
+      try {
+        dynamic decoded = jsonDecode(jsonString);
+        if (decoded is String) decoded = jsonDecode(decoded);
+        if (decoded is List) {
+          currentWorkReeds = decoded.map((e) => WorkReed.fromJson(Map<String, dynamic>.from(e as Map))).toList();
+        }
+      } catch (e) {
+        debugPrint('Error loading work_leads_data: $e');
+      }
     }
 
     final exists = currentWorkReeds.any((w) => w.id == tied.id);
@@ -232,6 +259,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         cuttingLength: cuttingLength,
         qualityLevel: 1, // 確実に Lv.1
         threadColor: tied.threadColor,
+        threadMaterial: tied.threadMaterial,
         vendor: tied.vendor,
         logs: [
           ScrapeLog(
@@ -249,9 +277,14 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
     await _loadWorkingReedIds();
 
+    await prefs.setInt('initial_work_tab_index', 0);
+
     if (mounted) {
-      // ページ1へ移動
-      MainRootPage.switchPage(context, 0);
+      try {
+        MainRootPage.switchPage(context, 0);
+      } catch (e) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     }
   }
 
@@ -330,16 +363,28 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   Future<void> _exportDataToFile() async {
     final prefs = await SharedPreferences.getInstance();
     
+    dynamic safeParseRaw(String key) {
+      final str = prefs.getString(key);
+      if (str == null) return [];
+      try {
+        dynamic dec = jsonDecode(str);
+        if (dec is String) dec = jsonDecode(dec);
+        return dec;
+      } catch (_) {
+        return [];
+      }
+    }
+
     final allData = {
       'version': '2.0',
       'exportedAt': DateTime.now().toIso8601String(),
-      'tubes': prefs.getString('tube_stocks') != null ? jsonDecode(prefs.getString('tube_stocks')!) : [],
-      'splits': prefs.getString('split_stocks') != null ? jsonDecode(prefs.getString('split_stocks')!) : [],
-      'gouged': prefs.getString('gouged_stocks') != null ? jsonDecode(prefs.getString('gouged_stocks')!) : [],
-      'shaped': prefs.getString('shaped_stocks') != null ? jsonDecode(prefs.getString('shaped_stocks')!) : [],
-      'staples': prefs.getString('staple_stocks') != null ? jsonDecode(prefs.getString('staple_stocks')!) : [],
-      'tied': prefs.getString('tied_stocks') != null ? jsonDecode(prefs.getString('tied_stocks')!) : [],
-      'work_leads': prefs.getString('work_leads_data') != null ? jsonDecode(prefs.getString('work_leads_data')!) : [],
+      'tubes': safeParseRaw('tube_stocks'),
+      'splits': safeParseRaw('split_stocks'),
+      'gouged': safeParseRaw('gouged_stocks'),
+      'shaped': safeParseRaw('shaped_stocks'),
+      'staples': safeParseRaw('staple_stocks'),
+      'tied': safeParseRaw('tied_stocks'),
+      'work_leads': safeParseRaw('work_leads_data'),
     };
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(allData);
@@ -914,13 +959,14 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           context: context,
           shaped: item,
           availableStaples: availableStaples,
-          onProcessed: (newTied, selectedStaple) {
+          onProcessed: (newTied, selectedStaple) async {
             setState(() {
-              _tiedStocks.add(newTied);
+              _tiedStocks.insert(0, newTied); // 新しいものを先頭に追加
               item.remainingCount--;
               selectedStaple.status = StapleStatus.tied;
             });
-            _saveData();
+            await _saveData();
+            await _loadData();
             _tabController.animateTo(5);
           },
         );
@@ -1030,103 +1076,103 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                   itemCount: items.length,
                   itemBuilder: (context, i) {
-        final item = items[i];
-        final bool isUnused = item.status == StapleStatus.unused;
-        final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
-      
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          color: isHighlighted ? Colors.amber.shade100 : null,
-          elevation: isHighlighted ? 6 : 1,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
-                        runSpacing: 4,
-                        children: [
-                          RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: Colors.black, fontSize: 16),
+                    final item = items[i];
+                    final bool isUnused = item.status == StapleStatus.unused;
+                    final bool isHighlighted = _highlightedId != null && item.id.contains(_highlightedId!);
+
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      color: isHighlighted ? Colors.amber.shade100 : null,
+                      elevation: isHighlighted ? 6 : 1,
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                TextSpan(
-                                  text: '${item.model} ${item.length}mm ', 
-                                  style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
+                                Expanded(
+                                  child: Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    spacing: 12,
+                                    runSpacing: 4,
+                                    children: [
+                                      RichText(
+                                        text: TextSpan(
+                                          style: const TextStyle(color: Colors.black, fontSize: 16),
+                                          children: [
+                                            TextSpan(
+                                              text: '${item.model} ${item.length}mm ', 
+                                              style: TextStyle(fontSize: 18, color: Colors.grey.shade900),
+                                            ),
+                                            TextSpan(
+                                              text: item.mark, 
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}',
+                                        style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                TextSpan(
-                                  text: item.mark, 
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 22, color: Colors.deepOrange),
+                                const SizedBox(width: 8),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: isUnused ? Colors.green.shade100 : Colors.orange.shade100,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        item.status.label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: isUnused ? Colors.green.shade900 : Colors.orange.shade900,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
+                                      tooltip: '編集',
+                                      onPressed: () => StockDialogs.showEditStapleDialog(
+                                        context: context,
+                                        staple: item,
+                                        existingModels: _getAllExistingModels(),
+                                        onSaved: () {
+                                          setState(() {});
+                                          _saveData();
+                                        },
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      tooltip: '削除',
+                                      onPressed: () => _confirmDelete(() {
+                                        setState(() => stapleStocks.remove(item));
+                                        _saveData();
+                                      }),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ),
-                          Text(
-                            '材質: ${item.material}${item.memo != null && item.memo!.isNotEmpty ? " | メモ: ${item.memo}" : ""}',
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isUnused ? Colors.green.shade100 : Colors.orange.shade100,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            item.status.label,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: isUnused ? Colors.green.shade900 : Colors.orange.shade900,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, color: Colors.blueGrey),
-                          tooltip: '編集',
-                          onPressed: () => StockDialogs.showEditStapleDialog(
-                            context: context,
-                            staple: item,
-                            existingModels: _getAllExistingModels(),
-                            onSaved: () {
-                              setState(() {});
-                              _saveData();
-                            },
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          tooltip: '削除',
-                          onPressed: () => _confirmDelete(() {
-                            setState(() => stapleStocks.remove(item));
-                            _saveData();
-                          }),
-                        ),
-                      ],
-                    ),
-                  ],
+                    );
+                  },
                 ),
-              ],
-            ),
-          ),
-        );
-      },
-    ),
-  ),
-],
-);
+        ),
+      ],
+    );
   }
 
   Widget _buildTiedStockTab() {

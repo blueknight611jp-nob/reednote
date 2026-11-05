@@ -305,6 +305,7 @@ class TiedStock {
   String? threadMaterial;
   String? vendor;
   String? memo;
+  String? customTag;
 
   TiedStock({
     required this.id,
@@ -317,6 +318,7 @@ class TiedStock {
     this.threadMaterial,
     this.vendor,
     this.memo,
+    this.customTag,
   });
 
   Map<String, dynamic> toJson() => {
@@ -330,6 +332,7 @@ class TiedStock {
         'threadMaterial': threadMaterial,
         'vendor': vendor,
         'memo': memo,
+        'customTag': customTag,
       };
 
   factory TiedStock.fromJson(Map<String, dynamic> json) {
@@ -344,6 +347,7 @@ class TiedStock {
       threadMaterial: json['threadMaterial'],
       vendor: json['vendor'],
       memo: json['memo'],
+      customTag: json['customTag'],
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'models.dart';
+import 'dart:math';
 
 /// 素材の種類を識別するEnum
 enum CaneType { tube, split, gouged, shaped }
@@ -350,58 +351,136 @@ class StockDialogs {
   }) {
     final modelController = TextEditingController(text: 'Chiarugi 2');
     final lengthController = TextEditingController(text: '46');
-    final markController = TextEditingController(text: 'a');
+    final markController = TextEditingController(text: 'a'); // 1本登録用
+    final startMarkController = TextEditingController(text: 'a'); // 複数登録用（開始）
+    final endMarkController = TextEditingController(text: 'h');   // 複数登録用（終了）
+
+    bool isBatchMode = false; // スイッチの状態（デフォルトはfalse: 1本登録）
 
     final frequentModels = _getFrequentOptions(existingModels);
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('チューブ 新規登録'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildAutocompleteField(
-              controller: modelController,
-              label: 'モデル (例: Chiarugi 2, Rigotti)',
-              options: frequentModels.isNotEmpty ? frequentModels : ['Chiarugi 2', 'Chiarugi 2+', 'Rigotti', 'Loree'],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text(isBatchMode ? 'チューブ 一括新規登録' : 'チューブ 新規登録'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildAutocompleteField(
+                  controller: modelController,
+                  label: 'モデル (例: Chiarugi 2, Rigotti)',
+                  options: frequentModels.isNotEmpty ? frequentModels : ['Chiarugi 2', 'Rigotti', 'Loree', 'Guercio d12'],
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: lengthController,
+                  decoration: const InputDecoration(labelText: '長さ (例: 46)'),
+                ),
+                const SizedBox(height: 12),
+
+                // ★ 複数本登録に切り替えるスイッチ
+                SwitchListTile(
+                  title: const Text('複数本（連続）で登録する', style: TextStyle(fontSize: 14)),
+                  value: isBatchMode,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (val) {
+                    setState(() {
+                      isBatchMode = val;
+                    });
+                  },
+                ),
+                const SizedBox(height: 8),
+
+                // ★ スイッチの状態に応じて入力欄を切り替え
+                if (!isBatchMode) ...[
+                  TextField(
+                    controller: markController,
+                    decoration: const InputDecoration(labelText: 'マーク (例: a)'),
+                  ),
+                ] else ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: startMarkController,
+                          decoration: const InputDecoration(labelText: '開始マーク (例: a)'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: TextField(
+                          controller: endMarkController,
+                          decoration: const InputDecoration(labelText: '終了マーク (例: h)'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: lengthController,
-              decoration: const InputDecoration(labelText: '長さ (例: 46)'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('キャンセル'),
             ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: markController,
-              decoration: const InputDecoration(labelText: 'マーク (例: a)'),
+            ElevatedButton(
+              onPressed: () {
+                final model = modelController.text.trim();
+                if (model.isEmpty) return;
+
+                List<StapleStock> newStaples = [];
+
+                if (!isBatchMode) {
+                  // --- 1本登録の場合 ---
+                  final mark = markController.text.trim();
+                  final uniqueId = 'Staple_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999999)}';
+                  
+                  newStaples.add(StapleStock(
+                    id: uniqueId,
+                    model: model,
+                    length: lengthController.text.trim(),
+                    mark: mark,
+                    status: StapleStatus.unused,
+                  ));
+                } else {
+                  // --- 複数本（連続）登録の場合 ---
+                  final startChar = startMarkController.text.trim();
+                  final endChar = endMarkController.text.trim();
+
+                  if (startChar.length == 1 && endChar.length == 1) {
+                    int startCode = startChar.codeUnitAt(0);
+                    int endCode = endChar.codeUnitAt(0);
+
+                    if (startCode <= endCode) {
+                      for (int code = startCode; code <= endCode; code++) {
+                        String markStr = String.fromCharCode(code);
+                        final uniqueId = 'Staple_${DateTime.now().microsecondsSinceEpoch}_${Random().nextInt(99999999)}_$markStr';
+                        
+                        newStaples.add(StapleStock(
+                          id: uniqueId,
+                          model: model,
+                          length: lengthController.text.trim(),
+                          mark: markStr,
+                          status: StapleStatus.unused,
+                        ));
+                      }
+                    }
+                  }
+                }
+
+                if (newStaples.isNotEmpty) {
+                  onRegistered(newStaples);
+                  Navigator.pop(context);
+                }
+              },
+              child: Text(isBatchMode ? '一括登録' : '登録'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('キャンセル'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final model = modelController.text.trim();
-              if (model.isEmpty) return;
-
-              final newStaple = StapleStock(
-                id: 'Staple_${DateTime.now().microsecondsSinceEpoch}',
-                model: model,
-                length: lengthController.text.trim(),
-                mark: markController.text.trim(),
-                status: StapleStatus.unused,
-              );
-
-              onRegistered([newStaple]);
-              Navigator.pop(context);
-            },
-            child: const Text('登録'),
-          ),
-        ],
       ),
     );
   }
@@ -738,6 +817,7 @@ class StockDialogs {
                   tiedDate: DateTime.now().toString().split(' ')[0],
                   totalLength: double.tryParse(lengthController.text) ?? 73.0,
                   threadColor: selectedColor,
+                  threadMaterial: selectedMaterial,
                   vendor: shaped.vendor,
                   memo: memoController.text.trim().isEmpty ? null : memoController.text.trim(),
                 );
