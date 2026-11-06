@@ -6,6 +6,7 @@ import '../models.dart';
 import '../utils/helpers.dart';
 import '../utils/reed_id_utils.dart';
 import '../utils/dismantle_helper.dart';
+import '../utils/search_query_parser.dart';
 import '../main.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
@@ -29,6 +30,10 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   final List<int> _levels = [1, 2, 3, 4, 5];
   String _sortOrder = 'log_date_desc'; // ソート順 (デフォルト: ログの日時 新しい順)
 
+  // 検索
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
   @override
   void initState() {
     super.initState();
@@ -51,6 +56,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void dispose() {
     _subTabController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -1017,6 +1023,20 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   Widget _buildReedList(int level) {
     List<WorkReed> reeds = _workReeds.where((l) => l.qualityLevel == level).toList();
 
+    // 検索フィルタ
+    if (_searchQuery.trim().isNotEmpty) {
+      final matcher = SearchQueryParser.compile(_searchQuery);
+      // チューブ情報もマッチ対象に含める
+      reeds = reeds.where((reed) {
+        final staple = _stapleStocks.firstWhere(
+          (s) => s.id == reed.stapleId,
+          orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+        );
+        final fullText = '${reed.searchText} ${staple.searchText}';
+        return matcher(fullText);
+      }).toList();
+    }
+
     // ソート処理
     reeds.sort((a, b) {
       switch (_sortOrder) {
@@ -1076,6 +1096,20 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 
     return Column(
       children: [
+        if (_searchQuery.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            child: Row(
+              children: [
+                Icon(Icons.filter_list, size: 14, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  '絞り込み中: ${reeds.length}件',
+                  style: TextStyle(fontSize: 12, color: Colors.amber.shade800, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -1107,7 +1141,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
           child: reeds.isEmpty
               ? Center(
                   child: Text(
-                    '「Lv.$level」のリードはありません',
+                    _searchQuery.trim().isNotEmpty
+                        ? '「$_searchQuery」に一致するリードはありません'
+                        : '「Lv.$level」のリードはありません',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                   ),
                 )

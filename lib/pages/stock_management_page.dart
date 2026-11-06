@@ -7,6 +7,7 @@ import '../models.dart';
 import '../dialogs.dart';
 import '../utils/helpers.dart';
 import '../utils/reed_id_utils.dart';
+import '../utils/search_query_parser.dart';
 import '../main.dart'; // MainRootPage.switchPage 呼び出し用
 
 class MainStockNavigationPage extends StatefulWidget {
@@ -32,6 +33,10 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   String? _highlightedId; // 現在ハイライトされているアイテムのID
   Timer? _highlightTimer;   // ハイライトを消すためのタイマー
+
+  // 検索
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   String _tubeSortOrder = 'cane_id';
   String _splitSortOrder = 'cane_id';
@@ -73,6 +78,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   void dispose() {
     _tabController.dispose();
     _highlightTimer?.cancel();
+    _searchController.dispose();
     super.dispose();
   }
 
@@ -534,17 +540,58 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
             child: ChoiceChip(label: Text(_showOnlyInStock ? '在庫ありのみ' : 'すべて表示'), selected: !_showOnlyInStock, onSelected: (s) => setState(() => _showOnlyInStock = !s)),
           ),
         ],
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          tabs: const [
-            Tab(icon: Icon(Icons.blur_circular), text: '1. 丸材(T)'),
-            Tab(icon: Icon(Icons.call_split), text: '2. 半カマボコ(P)'),
-            Tab(icon: Icon(Icons.density_medium), text: '3. カマボコ(G)'),
-            Tab(icon: Icon(Icons.content_cut), text: '4. 舟形(S)'),
-            Tab(icon: Icon(Icons.architecture), text: '5. チューブ(Hülse)'),
-            Tab(icon: Icon(Icons.waves), text: '6. 糸巻き(Tied)'),
-          ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(96),
+          child: Column(
+            children: [
+              // 検索バー
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: '検索 (AND / OR / NOT 使用可。例: Rigotti AND 2506)',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            tooltip: '検索をクリア',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : Tooltip(
+                            message: SearchQueryParser.helpText,
+                            child: const Icon(Icons.help_outline, size: 18, color: Colors.black38),
+                          ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide.none,
+                    ),
+                    isDense: true,
+                  ),
+                  onChanged: (val) => setState(() => _searchQuery = val),
+                ),
+              ),
+              // タブバー
+              TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                tabs: const [
+                  Tab(icon: Icon(Icons.blur_circular), text: '1. 丸材(T)'),
+                  Tab(icon: Icon(Icons.call_split), text: '2. 半カマボコ(P)'),
+                  Tab(icon: Icon(Icons.density_medium), text: '3. カマボコ(G)'),
+                  Tab(icon: Icon(Icons.content_cut), text: '4. 舟形(S)'),
+                  Tab(icon: Icon(Icons.architecture), text: '5. チューブ(Hülse)'),
+                  Tab(icon: Icon(Icons.waves), text: '6. 糸巻き(Tied)'),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       body: TabBarView(
@@ -692,6 +739,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     required String Function(T) getDisplayTitle,
     required String Function(T) getId,
     required String Function(T) getSubtitle,
+    required String Function(T) getSearchText,
     required int Function(T) getCount,
     required void Function(T, int) setCount,
     required VoidCallback onAddStock,
@@ -709,10 +757,30 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         ? items.where((e) => getCount(e) > 0).toList() 
         : List.from(items);
     
+    // 検索フィルタ
+    if (_searchQuery.trim().isNotEmpty) {
+      final matcher = SearchQueryParser.compile(_searchQuery);
+      filteredItems = filteredItems.where((e) => matcher(getSearchText(e))).toList();
+    }
+
     sortFunction(filteredItems, sortOrder);
 
     return Column(
       children: [
+        if (_searchQuery.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            child: Row(
+              children: [
+                Icon(Icons.filter_list, size: 14, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  '絞り込み中: ${filteredItems.length}件',
+                  style: TextStyle(fontSize: 12, color: Colors.amber.shade800, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -732,7 +800,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         ),
         Expanded(
           child: filteredItems.isEmpty
-              ? Center(child: Text(emptyMessage))
+              ? Center(child: Text(
+                  _searchQuery.trim().isNotEmpty ? '「$_searchQuery」に一致するアイテムはありません' : emptyMessage,
+                ))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                   itemCount: filteredItems.length,
@@ -779,6 +849,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       getDisplayTitle: (e) => e.displayTitle,
       getId: (e) => e.id,
       getSubtitle: (e) => '太さ: ${e.diameter} | 購入先: ${e.vendor ?? "未登録"}\nメモ: ${e.memo ?? "-"}',
+      getSearchText: (e) => e.searchText,
       getCount: (e) => e.remainingCount,
       setCount: (e, val) => e.remainingCount = val,
       onAddStock: () {},
@@ -835,6 +906,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       getDisplayTitle: (e) => e.displayTitle,
       getId: (e) => e.id,
       getSubtitle: (e) => '太さ: ${e.diameter} | 購入先: ${e.vendor ?? "未登録"}\nメモ: ${e.memo ?? "-"}',
+      getSearchText: (e) => e.searchText,
       getCount: (e) => e.remainingCount,
       setCount: (e, val) => e.remainingCount = val,
       onAddStock: () {},
@@ -889,6 +961,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       getDisplayTitle: (e) => e.displayTitle,
       getId: (e) => e.id,
       getSubtitle: (e) => '太さ: ${e.diameter} | マシン: ${e.machine} | 厚さ ${e.thickness} | 購入先: ${e.vendor ?? "未登録"}\n日付: ${e.gougingDate} | メモ: ${e.memo ?? "-"}',
+      getSearchText: (e) => e.searchText,
       getCount: (e) => e.remainingCount,
       setCount: (e, val) => e.remainingCount = val,
       onAddStock: () {},
@@ -947,6 +1020,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       getDisplayTitle: (e) => e.displayTitle,
       getId: (e) => e.id,
       getSubtitle: (e) => '太さ: ${e.diameter} | シェーパー: ${e.shaper} | 購入先: ${e.vendor ?? "未登録"}\n日付: ${e.shapingDate} | メモ: ${e.memo ?? "-"}',
+      getSearchText: (e) => e.searchText,
       getCount: (e) => e.remainingCount,
       setCount: (e, val) => e.remainingCount = val,
       onAddStock: () {},
@@ -1010,6 +1084,12 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       items = items.where((e) => e.status == StapleStatus.unused).toList();
     }
 
+    // 検索フィルタ
+    if (_searchQuery.trim().isNotEmpty) {
+      final matcher = SearchQueryParser.compile(_searchQuery);
+      items = items.where((e) => matcher(e.searchText)).toList();
+    }
+
     items.sort((a, b) {
       switch (_stapleSortOrder) {
         case 'model':
@@ -1045,6 +1125,20 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
     return Column(
       children: [
+        if (_searchQuery.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            child: Row(
+              children: [
+                Icon(Icons.filter_list, size: 14, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  '絞り込み中: ${items.length}件',
+                  style: TextStyle(fontSize: 12, color: Colors.amber.shade800, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -1177,6 +1271,19 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
   Widget _buildTiedStockTab() {
     List<TiedStock> sortedItems = List.from(_tiedStocks);
+
+    // 検索フィルタ（チューブ情報も含む）
+    if (_searchQuery.trim().isNotEmpty) {
+      final matcher = SearchQueryParser.compile(_searchQuery);
+      sortedItems = sortedItems.where((item) {
+        final staple = stapleStocks.firstWhere(
+          (s) => s.id == item.stapleId,
+          orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+        );
+        return matcher('${item.searchText} ${staple.searchText}');
+      }).toList();
+    }
+
     sortedItems.sort((a, b) {
       switch (_tiedSortOrder) {
         case 'staple_full':
@@ -1226,6 +1333,20 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
 
     return Column(
       children: [
+        if (_searchQuery.trim().isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            child: Row(
+              children: [
+                Icon(Icons.filter_list, size: 14, color: Colors.amber.shade700),
+                const SizedBox(width: 4),
+                Text(
+                  '絞り込み中: ${sortedItems.length}件',
+                  style: TextStyle(fontSize: 12, color: Colors.amber.shade800, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -1254,7 +1375,9 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         ),
         Expanded(
           child: sortedItems.isEmpty 
-              ? const Center(child: Text('糸巻き(Tied)されたリードがありません')) 
+              ? Center(child: Text(
+                  _searchQuery.trim().isNotEmpty ? '「$_searchQuery」に一致するアイテムはありません' : '糸巻き(Tied)されたリードがありません',
+                ))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 80),
                   itemCount: sortedItems.length,

@@ -24,6 +24,12 @@ class TubeStock {
   String get code => id;
   String get displayTitle => '$shortBrand$purchasePeriod(T)';
 
+  /// 検索対象テキスト（カード内に表示される全情報）
+  String get searchText => [
+        id, brand, purchasePeriod, diameter,
+        vendor ?? '', memo ?? '', displayTitle,
+      ].join(' ');
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'brand': brand,
@@ -76,6 +82,12 @@ class SplitCaneStock {
     String originTag = id.contains('-T') ? 'T' : 'P';
     return '$shortBrand$purchasePeriod$originTag';
   }
+
+  /// 検索対象テキスト
+  String get searchText => [
+        id, brand, purchasePeriod, diameter,
+        vendor ?? '', memo ?? '', displayTitle,
+      ].join(' ');
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -136,6 +148,13 @@ class GougedCaneStock {
     String thickStr = thickness != null ? '-$thickness' : '';
     return '$shortBrand$purchasePeriod$originTag$thickStr';
   }
+
+  /// 検索対象テキスト
+  String get searchText => [
+        id, brand, purchasePeriod, diameter,
+        machine, thickness?.toString() ?? '',
+        gougingDate, vendor ?? '', memo ?? '', displayTitle,
+      ].join(' ');
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -204,6 +223,13 @@ class ShapedCaneStock {
     return '$shortBrand$purchasePeriod$originTag$thickStr$shaperStr';
   }
 
+  /// 検索対象テキスト
+  String get searchText => [
+        id, brand, purchasePeriod, diameter,
+        shaper, thickness?.toString() ?? '',
+        shapingDate, vendor ?? '', memo ?? '', displayTitle,
+      ].join(' ');
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'brand': brand,
@@ -265,6 +291,12 @@ class StapleStock {
 
   String get displayTitle => '$model ($length)';
 
+  /// 検索対象テキスト
+  String get searchText => [
+        id, model, length, mark, material,
+        status.label, memo ?? '',
+      ].join(' ');
+
   Map<String, dynamic> toJson() => {
         'id': id,
         'model': model,
@@ -320,6 +352,14 @@ class TiedStock {
     this.memo,
     this.customTag,
   });
+
+  /// 検索対象テキスト
+  String get searchText => [
+        id, stapleId, shapedCode, shapedTitle, tiedDate,
+        threadColor ?? '', threadMaterial ?? '',
+        vendor ?? '', memo ?? '', customTag ?? '',
+        totalLength.toString(),
+      ].join(' ');
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -439,6 +479,24 @@ class WorkReed {
     List<String>? photosBase64,
     required this.logs,
   }) : photosBase64 = photosBase64 ?? [];
+
+  /// 検索対象テキスト（ログ内のメモも含む）
+  String get searchText {
+    final parts = [
+      id, stapleId, shapedCode, shapedTitle, tiedDate,
+      cuttingLength, totalLength.toString(),
+      threadColor ?? '', threadMaterial ?? '',
+      vendor ?? '', customTag ?? '',
+      'Lv.$qualityLevel',
+    ];
+    for (final log in logs) {
+      parts.addAll([
+        log.comment, log.memo ?? '',
+        log.resistanceRating ?? '', log.pitchRating ?? '',
+      ]);
+    }
+    return parts.join(' ');
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
