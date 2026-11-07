@@ -10,7 +10,7 @@ import '../utils/search_query_parser.dart';
 import '../main.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
-  final int initialLevelIndex; // 外部から初期タブインデックス（0 = Lv.1）を指定可能に
+  final int initialLevelIndex; // 外部から初期レベル（0 = Lv.1、またはマイナスで全指定など）を指定可能
 
   const AdjustmentWorkPage({
     super.key,
@@ -21,13 +21,14 @@ class AdjustmentWorkPage extends StatefulWidget {
   State<AdjustmentWorkPage> createState() => _AdjustmentWorkPageState();
 }
 
-class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
-    with SingleTickerProviderStateMixin {
+class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
   List<WorkReed> _workReeds = [];
   List<StapleStock> _stapleStocks = []; // チューブ情報取得用
-  late TabController _subTabController;
 
   final List<int> _levels = [1, 2, 3, 4, 5];
+  // 選択されているレベルのセット（初期状態ではすべて選択、あるいは initialLevelIndex から算出）
+  late Set<int> _selectedLevels;
+
   String _sortOrder = 'log_date_desc'; // ソート順 (デフォルト: ログの日時 新しい順)
 
   // 検索
@@ -37,25 +38,17 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
   @override
   void initState() {
     super.initState();
-    // 渡された initialLevelIndex で TabController を初期化
-    _subTabController = TabController(
-      length: _levels.length,
-      vsync: this,
-      initialIndex: widget.initialLevelIndex.clamp(0, _levels.length - 1),
-    );
-    
-    _subTabController.addListener(() {
-      if (!_subTabController.indexIsChanging) {
-        _loadWorkReeds();
-      }
-    });
+    // 初期選択レベルの設定（指定されたインデックスに対応するレベルを選択、全体表示にすることも可能）
+    final initialLvl = (widget.initialLevelIndex >= 0 && widget.initialLevelIndex < _levels.length)
+        ? _levels[widget.initialLevelIndex]
+        : 1;
+    _selectedLevels = {initialLvl}; // デフォルトでは指定されたレベルのみ、または全選択にするなら Set.from(_levels)
 
     _loadWorkReeds();
   }
 
   @override
   void dispose() {
-    _subTabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -186,9 +179,10 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     await _loadWorkReeds();
 
     if (mounted) {
-      // 指定のレベルのタブへ確実に切り替え
-      final targetIndex = (qualityLevel - 1).clamp(0, _levels.length - 1);
-      _subTabController.animateTo(targetIndex);
+      // 登録したレベルを選択状態にして全体リストを表示
+      setState(() {
+        _selectedLevels = {qualityLevel};
+      });
       MainRootPage.switchPage(context, 0);
     }
   }
@@ -285,7 +279,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     final prefs = await SharedPreferences.getInstance();
     final result = await DismantleHelper.dismantleReed(reed: reed, prefs: prefs);
 
-    // メモリ上のチューブストック一覧を再同期
     final stapleJson = prefs.getString('staple_stocks');
     if (stapleJson != null) {
       final List decoded = jsonDecode(stapleJson);
@@ -367,7 +360,7 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
     }
     String selectedModel = initialModel;
     
-    int qualityLevel = existingReed?.qualityLevel ?? _levels[_subTabController.index];
+    int qualityLevel = existingReed?.qualityLevel ?? (_selectedLevels.isNotEmpty ? _selectedLevels.first : 1);
     String totalLength = existingReed?.cuttingLength ?? '71.0';
     List<String> photos = existingReed != null ? List.from(existingReed.photosBase64) : [];
 
@@ -682,9 +675,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                       });
                       _saveWorkReeds();
                       Navigator.pop(context);
-                      if (qualityLevel > 0) {
-                        _subTabController.animateTo(qualityLevel - 1);
-                      }
                     }
 
                     if (mounted) {
@@ -790,7 +780,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
                     if (currentLevel == 0) {
                       _confirmAndDismantle(reed);
                     } else {
-                      _subTabController.animateTo(currentLevel - 1);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('ログを追加しました')),
                       );
@@ -978,56 +967,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('リード管理・調整 (レベル別)'),
-        actions: [
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.amber.shade100,
-              foregroundColor: Colors.amber.shade900,
-              elevation: 0,
-            ),
-            icon: const Icon(Icons.add_circle_outline, size: 18),
-            label: const Text('＋ ダイレクト登録'),
-            onPressed: () => _showWorkReedDialog(),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: '再読み込み',
-            onPressed: _loadWorkReeds,
-          ),
-        ],
-        bottom: TabBar(
-          controller: _subTabController,
-          isScrollable: true,
-          tabs: _levels.map((lvl) {
-            String label = '';
-            if (lvl == 1) label = 'Lv.1 (荒削り)';
-            if (lvl == 2) label = 'Lv.2 (調整中)';
-            if (lvl == 3) label = 'Lv.3 (練習用)';
-            if (lvl == 4) label = 'Lv.4 (2軍)';
-            if (lvl == 5) label = 'Lv.5 (1軍本番)';
-            return Tab(text: label);
-          }).toList(),
-        ),
-      ),
-      body: TabBarView(
-        controller: _subTabController,
-        children: _levels.map((lvl) => _buildReedList(lvl)).toList(),
-      ),
-    );
-  }
+    // 1. レベル絞り込み
+    List<WorkReed> filteredReeds = _workReeds.where((reed) {
+      return _selectedLevels.contains(reed.qualityLevel);
+    }).toList();
 
-  Widget _buildReedList(int level) {
-    List<WorkReed> reeds = _workReeds.where((l) => l.qualityLevel == level).toList();
-
-    // 検索フィルタ
+    // 2. テキスト検索絞り込み (SearchQueryParser 対応)
     if (_searchQuery.trim().isNotEmpty) {
       final matcher = SearchQueryParser.compile(_searchQuery);
-      // チューブ情報もマッチ対象に含める
-      reeds = reeds.where((reed) {
+      filteredReeds = filteredReeds.where((reed) {
         final staple = _stapleStocks.firstWhere(
           (s) => s.id == reed.stapleId,
           orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
@@ -1037,8 +985,8 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       }).toList();
     }
 
-    // ソート処理
-    reeds.sort((a, b) {
+    // 3. ソート処理
+    filteredReeds.sort((a, b) {
       switch (_sortOrder) {
         case 'log_date_desc':
           final aDate = a.logs.isNotEmpty ? a.logs.first.date : '';
@@ -1094,349 +1042,445 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage>
       }
     });
 
-    return Column(
-      children: [
-        if (_searchQuery.trim().isNotEmpty)
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('リード管理・調整 (全体リスト)'),
+        actions: [
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber.shade100,
+              foregroundColor: Colors.amber.shade900,
+              elevation: 0,
+            ),
+            icon: const Icon(Icons.add_circle_outline, size: 18),
+            label: const Text('＋ ダイレクト登録'),
+            onPressed: () => _showWorkReedDialog(),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: '再読み込み',
+            onPressed: _loadWorkReeds,
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        children: [
+          // --- 検索バー & フィルターコントロール領域 ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            color: Colors.grey.shade100,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 検索フィールド
+                TextField(
+                  controller: _searchController,
+                  decoration: InputDecoration(
+                    hintText: 'テキスト検索 (例: 赤 AND ナイロン, NOT Chiarugi)',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    isDense: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    filled: true,
+                    fillColor: Colors.white,
+                  ),
+                  onChanged: (val) {
+                    setState(() => _searchQuery = val);
+                  },
+                ),
+                const SizedBox(height: 10),
+                // レベル選択 FilterChips & ソート切り替え
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    // レベルチップ
+                    Expanded(
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: _levels.map((lvl) {
+                          final isSelected = _selectedLevels.contains(lvl);
+                          return FilterChip(
+                            label: Text('Lv.$lvl', style: const TextStyle(fontSize: 12)),
+                            selected: isSelected,
+                            selectedColor: Colors.amber.shade200,
+                            checkmarkColor: Colors.amber.shade900,
+                            onSelected: (selected) {
+                              setState(() {
+                                if (selected) {
+                                  _selectedLevels.add(lvl);
+                                } else {
+                                  // すべて外れてしまうのを防ぐ場合は制御可能
+                                  if (_selectedLevels.length > 1) {
+                                    _selectedLevels.remove(lvl);
+                                  }
+                                }
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    // 全選択 / 全解除ボタンなどが必要であればここに追加可能
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // ソート選択バー
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(width: 6),
+                    DropdownButton<String>(
+                      value: _sortOrder,
+                      isDense: true,
+                      items: const [
+                        DropdownMenuItem(value: 'log_date_desc', child: Text('ログ日時 (新順)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'log_date_asc', child: Text('ログ日時 (古順)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'model', child: Text('モデル名順', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'cane_id', child: Text('ケーンID順', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'thread_color', child: Text('糸の色順', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'tied_date_desc', child: Text('登録日 (新順)', style: TextStyle(fontSize: 13))),
+                        DropdownMenuItem(value: 'tied_date_asc', child: Text('登録日 (古順)', style: TextStyle(fontSize: 13))),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          _setSortOrder(val);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // --- ヒット件数表示 ---
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 6, 20, 0),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
               children: [
                 Icon(Icons.filter_list, size: 14, color: Colors.amber.shade700),
                 const SizedBox(width: 4),
                 Text(
-                  '絞り込み中: ${reeds.length}件',
+                  '表示中: ${filteredReeds.length}件 / 全 ${_workReeds.length}件',
                   style: TextStyle(fontSize: 12, color: Colors.amber.shade800, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              const Text('ソート: ', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(width: 8),
-              DropdownButton<String>(
-                value: _sortOrder,
-                items: const [
-                  DropdownMenuItem(value: 'log_date_desc', child: Text('ログの日時 (新しい順)')),
-                  DropdownMenuItem(value: 'log_date_asc', child: Text('ログの日時 (古い順)')),
-                  DropdownMenuItem(value: 'model', child: Text('モデル名順')),
-                  DropdownMenuItem(value: 'cane_id', child: Text('ケーンのID順')),
-                  DropdownMenuItem(value: 'thread_color', child: Text('糸の色順')),
-                  DropdownMenuItem(value: 'tied_date_desc', child: Text('登録日 (新しい順)')),
-                  DropdownMenuItem(value: 'tied_date_asc', child: Text('登録日 (古い順)')),
-                ],
-                onChanged: (val) {
-                  if (val != null) {
-                    _setSortOrder(val);
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: reeds.isEmpty
-              ? Center(
-                  child: Text(
-                    _searchQuery.trim().isNotEmpty
-                        ? '「$_searchQuery」に一致するリードはありません'
-                        : '「Lv.$level」のリードはありません',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(12),
-                  itemCount: reeds.length,
-                  itemBuilder: (context, index) {
-        final reed = reeds[index];
 
-        // 対応するチューブ情報を取得
-        final staple = _stapleStocks.firstWhere(
-          (s) => s.id == reed.stapleId,
-          orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
-        );
-
-        return Card(
-          elevation: 2,
-          margin: const EdgeInsets.only(bottom: 12),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1行目：チューブ情報 + カスタムマーク + ケーンタイトル + IDリンク
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 8,
-                        children: [
-                          Text(
-                            '${staple.model} ${staple.length}${staple.mark}',
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
-                          ),
-                          if (reed.customTag != null && reed.customTag!.isNotEmpty) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.blue.shade100,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'No. ${reed.customTag}',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
-                              ),
-                            ),
-                          ],
-                          Text(
-                            reed.shapedTitle,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                          ),
-                          if (reed.id.isNotEmpty) ...[
-                            const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                            ReedIdUtils.buildClickableIdParts(context, reed.id, null),
-                            const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                          ],
-                        ],
-                      ),
+          // --- リードリスト本体 ---
+          Expanded(
+            child: filteredReeds.isEmpty
+                ? Center(
+                    child: Text(
+                      _searchQuery.trim().isNotEmpty
+                          ? '「$_searchQuery」に一致するリードはありません'
+                          : '選択されたレベルのリードはありません',
+                      style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
                     ),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
-                          tooltip: 'リード情報を編集',
-                          onPressed: () => _showWorkReedDialog(existingReed: reed),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                          tooltip: 'リードを削除',
-                          onPressed: () => _confirmAndDeleteReed(reed),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                
-                const SizedBox(height: 6),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: filteredReeds.length,
+                    itemBuilder: (context, index) {
+                      final reed = filteredReeds[index];
 
-                // 2行目：糸の種類、糸の色、ラベルレベル、今の長さ、登録日
-                Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  spacing: 8,
-                  runSpacing: 4,
-                  children: [
-                    Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                    
-                    if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
-                      const Text('| 糸:'),
-                      Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: getThreadColor(reed.threadColor),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
-                    ],
+                      // 対応するチューブ情報を取得
+                      final staple = _stapleStocks.firstWhere(
+                        (s) => s.id == reed.stapleId,
+                        orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
+                      );
 
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.amber.shade300),
-                      ),
-                      child: DropdownButton<int>(
-                        value: reed.qualityLevel,
-                        isDense: true,
-                        underline: const SizedBox.shrink(),
-                        items: List.generate(6, (i) => i).reversed.map((lvl) {
-                          return DropdownMenuItem(
-                            value: lvl,
-                            child: Text(
-                              lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}',
-                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
-                            ),
-                          );
-                        }).toList(),
-                        onChanged: (newLevel) {
-                          if (newLevel != null) {
-                            if (newLevel == 0) {
-                              _confirmAndDismantle(reed);
-                            } else {
-                              setState(() {
-                                reed.qualityLevel = newLevel;
-                              });
-                              _saveWorkReeds();
-                              _subTabController.animateTo(newLevel - 1);
-                            }
-                          }
-                        },
-                      ),
-                    ),
-
-                    Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
-                    Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          for (int i = 0; i < reed.photosBase64.length; i++)
-                            Stack(
-                              children: [
-                                InkWell(
-                                  onTap: () => _showPhotoPreview(reed.photosBase64[i]),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(6),
-                                    child: Image.memory(
-                                      base64Decode(reed.photosBase64[i].split(',').last),
-                                      width: 60,
-                                      height: 60,
-                                      fit: BoxFit.cover,
+                      return Card(
+                        elevation: 2,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // 1行目：チューブ情報 + カスタムマーク + ケーンタイトル + IDリンク
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Wrap(
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      spacing: 8,
+                                      children: [
+                                        Text(
+                                          '${staple.model} ${staple.length}${staple.mark}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
+                                        ),
+                                        if (reed.customTag != null && reed.customTag!.isNotEmpty) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: Colors.blue.shade100,
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'No. ${reed.customTag}',
+                                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
+                                            ),
+                                          ),
+                                        ],
+                                        Text(
+                                          reed.shapedTitle,
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                        if (reed.id.isNotEmpty) ...[
+                                          const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                                          ReedIdUtils.buildClickableIdParts(context, reed.id, null),
+                                          const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                                        ],
+                                      ],
                                     ),
                                   ),
-                                ),
-                                Positioned(
-                                  right: 0,
-                                  top: 0,
-                                  child: InkWell(
-                                    onTap: () {
-                                      setState(() {
-                                        reed.photosBase64.removeAt(i);
-                                      });
-                                      _saveWorkReeds();
-                                    },
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        color: Colors.black54,
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      IconButton(
+                                        icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
+                                        tooltip: 'リード情報を編集',
+                                        onPressed: () => _showWorkReedDialog(existingReed: reed),
+                                      ),
+                                      IconButton(
+                                        icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                        tooltip: 'リードを削除',
+                                        onPressed: () => _confirmAndDeleteReed(reed),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                              
+                              const SizedBox(height: 6),
+
+                              // 2行目：糸の種類、糸の色、ラベルレベル、今の長さ、登録日
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                                  
+                                  if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
+                                    const Text('| 糸:'),
+                                    Container(
+                                      width: 10,
+                                      height: 10,
+                                      decoration: BoxDecoration(
+                                        color: getThreadColor(reed.threadColor),
                                         shape: BoxShape.circle,
                                       ),
-                                      padding: const EdgeInsets.all(2),
-                                      child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                    ),
+                                    Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
+                                  ],
+
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade300),
+                                    ),
+                                    child: DropdownButton<int>(
+                                      value: reed.qualityLevel,
+                                      isDense: true,
+                                      underline: const SizedBox.shrink(),
+                                      items: List.generate(6, (i) => i).reversed.map((lvl) {
+                                        return DropdownMenuItem(
+                                          value: lvl,
+                                          child: Text(
+                                            lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}',
+                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (newLevel) {
+                                        if (newLevel != null) {
+                                          if (newLevel == 0) {
+                                            _confirmAndDismantle(reed);
+                                          } else {
+                                            setState(() {
+                                              reed.qualityLevel = newLevel;
+                                            });
+                                            _saveWorkReeds();
+                                          }
+                                        }
+                                      },
                                     ),
                                   ),
+
+                                  Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
+                                  Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                                ],
+                              ),
+
+                              const SizedBox(height: 12),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        for (int i = 0; i < reed.photosBase64.length; i++)
+                                          Stack(
+                                            children: [
+                                              InkWell(
+                                                onTap: () => _showPhotoPreview(reed.photosBase64[i]),
+                                                child: ClipRRect(
+                                                  borderRadius: BorderRadius.circular(6),
+                                                  child: Image.memory(
+                                                    base64Decode(reed.photosBase64[i].split(',').last),
+                                                    width: 60,
+                                                    height: 60,
+                                                    fit: BoxFit.cover,
+                                                  ),
+                                                ),
+                                              ),
+                                              Positioned(
+                                                right: 0,
+                                                top: 0,
+                                                child: InkWell(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      reed.photosBase64.removeAt(i);
+                                                    });
+                                                    _saveWorkReeds();
+                                                  },
+                                                  child: Container(
+                                                    decoration: const BoxDecoration(
+                                                      color: Colors.black54,
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    padding: const EdgeInsets.all(2),
+                                                    child: const Icon(Icons.close, size: 14, color: Colors.white),
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        OutlinedButton.icon(
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(60, 60),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                          ),
+                                          icon: const Icon(Icons.add_a_photo, size: 18),
+                                          label: const Text('写真追加', style: TextStyle(fontSize: 11)),
+                                          onPressed: () => _pickAndAddPhoto(reed),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              if (reed.logs.isNotEmpty) ...[
+                                InkWell(
+                                  onTap: () => _showLogHistoryDialog(reed),
+                                  borderRadius: BorderRadius.circular(6),
+                                  child: Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.shade50,
+                                      border: Border.all(color: Colors.amber.shade300),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '最新ログ (${reed.logs.first.date})',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 12,
+                                                color: Colors.amber.shade900,
+                                              ),
+                                            ),
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  '全 ${reed.logs.length} 件',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 12,
+                                                    color: Colors.amber.shade900,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 4),
+                                                const Icon(Icons.open_in_full, size: 14, color: Colors.amber),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (reed.logs.first.resistanceRating != null && reed.logs.first.resistanceRating!.isNotEmpty)
+                                          Text(
+                                            '抵抗感: ${reed.logs.first.resistanceRating}',
+                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                          ),
+                                        if (reed.logs.first.pitchRating != null && reed.logs.first.pitchRating!.isNotEmpty)
+                                          Text(
+                                            'ピッチ: ${reed.logs.first.pitchRating}',
+                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                          ),
+                                        if (reed.logs.first.memo != null && reed.logs.first.memo!.isNotEmpty)
+                                          Text(
+                                            reed.logs.first.memo!,
+                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ] else ...[
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                                  child: Text('調整ログはまだありません', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                                 ),
                               ],
-                            ),
-                          OutlinedButton.icon(
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(60, 60),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                            ),
-                            icon: const Icon(Icons.add_a_photo, size: 18),
-                            label: const Text('写真追加', style: TextStyle(fontSize: 11)),
-                            onPressed: () => _pickAndAddPhoto(reed),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (reed.logs.isNotEmpty) ...[
-                  InkWell(
-                    onTap: () => _showLogHistoryDialog(reed),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        border: Border.all(color: Colors.amber.shade300),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '最新ログ (${reed.logs.first.date})',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: Colors.amber.shade900,
+                              const Divider(height: 20),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: ElevatedButton.icon(
+                                  onPressed: () => _showAddLogDialog(reed),
+                                  icon: const Icon(Icons.note_add, size: 18),
+                                  label: const Text('ログ追加'),
                                 ),
-                              ),
-                              Row(
-                                children: [
-                                  Text(
-                                    '全 ${reed.logs.length} 件',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12,
-                                      color: Colors.amber.shade900,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  const Icon(Icons.open_in_full, size: 14, color: Colors.amber),
-                                ],
                               ),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          if (reed.logs.first.resistanceRating != null && reed.logs.first.resistanceRating!.isNotEmpty)
-                            Text(
-                              '抵抗感: ${reed.logs.first.resistanceRating}',
-                              style: const TextStyle(fontSize: 13, color: Colors.black87),
-                            ),
-                          if (reed.logs.first.pitchRating != null && reed.logs.first.pitchRating!.isNotEmpty)
-                            Text(
-                              'ピッチ: ${reed.logs.first.pitchRating}',
-                              style: const TextStyle(fontSize: 13, color: Colors.black87),
-                            ),
-                          if (reed.logs.first.memo != null && reed.logs.first.memo!.isNotEmpty)
-                            Text(
-                              reed.logs.first.memo!,
-                              style: const TextStyle(fontSize: 13, color: Colors.black87),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
-                ] else ...[
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                    child: Text('調整ログはまだありません', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                  ),
-                ],
-                const Divider(height: 20),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showAddLogDialog(reed),
-                    icon: const Icon(Icons.note_add, size: 18),
-                    label: const Text('ログ追加'),
-                  ),
-                ),
-              ],
-            ),
           ),
-        );
-      },
-    ),
-  ),
-],
-);
+        ],
+      ),
+    );
   }
 }
