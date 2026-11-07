@@ -8,9 +8,10 @@ import '../utils/reed_id_utils.dart';
 import '../utils/dismantle_helper.dart';
 import '../utils/search_query_parser.dart';
 import '../main.dart';
+import 'reed_detail_page.dart';
 
 class AdjustmentWorkPage extends StatefulWidget {
-  final int initialLevelIndex; // 外部から初期レベル（0 = Lv.1、またはマイナスで全指定など）を指定可能
+  final int initialLevelIndex;
 
   const AdjustmentWorkPage({
     super.key,
@@ -23,26 +24,23 @@ class AdjustmentWorkPage extends StatefulWidget {
 
 class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
   List<WorkReed> _workReeds = [];
-  List<StapleStock> _stapleStocks = []; // チューブ情報取得用
+  List<StapleStock> _stapleStocks = [];
 
   final List<int> _levels = [1, 2, 3, 4, 5];
-  // 選択されているレベルのセット（初期状態ではすべて選択、あるいは initialLevelIndex から算出）
   late Set<int> _selectedLevels;
 
-  String _sortOrder = 'log_date_desc'; // ソート順 (デフォルト: ログの日時 新しい順)
+  String _sortOrder = 'log_date_desc';
 
-  // 検索
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
-    // 初期選択レベルの設定（指定されたインデックスに対応するレベルを選択、全体表示にすることも可能）
     final initialLvl = (widget.initialLevelIndex >= 0 && widget.initialLevelIndex < _levels.length)
         ? _levels[widget.initialLevelIndex]
         : 1;
-    _selectedLevels = {initialLvl}; // デフォルトでは指定されたレベルのみ、または全選択にするなら Set.from(_levels)
+    _selectedLevels = {initialLvl};
 
     _loadWorkReeds();
   }
@@ -62,21 +60,18 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
   Future<void> _loadWorkReeds() async {
     final prefs = await SharedPreferences.getInstance();
     
-    // リードデータの読み込み
     final jsonString = prefs.getString('work_leads_data');
     if (jsonString != null) {
       final List decoded = jsonDecode(jsonString);
       _workReeds = decoded.map((e) => WorkReed.fromJson(e)).toList();
     }
 
-    // チューブデータの読み込み（モデル名などの表示に利用）
     final stapleJson = prefs.getString('staple_stocks');
     if (stapleJson != null) {
       final List decoded = jsonDecode(stapleJson);
       _stapleStocks = decoded.map((e) => StapleStock.fromJson(e)).toList();
     }
 
-    // 保存されているソート順の読み込み
     final savedSort = prefs.getString('work_leads_sort_order');
     if (savedSort != null) {
       _sortOrder = savedSort;
@@ -179,7 +174,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
     await _loadWorkReeds();
 
     if (mounted) {
-      // 登録したレベルを選択状態にして全体リストを表示
       setState(() {
         _selectedLevels = {qualityLevel};
       });
@@ -297,53 +291,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
       }
       setState(() {});
     }
-  }
-
-  void _pickAndAddPhoto(WorkReed reed) {
-    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
-    uploadInput.click();
-    uploadInput.onChange.listen((e) {
-      final files = uploadInput.files;
-      if (files == null || files.isEmpty) return;
-      final reader = html.FileReader();
-      reader.onLoadEnd.listen((e) {
-        final base64String = reader.result as String?;
-        if (base64String != null) {
-          setState(() {
-            reed.photosBase64.add(base64String);
-          });
-          _saveWorkReeds();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('写真を追加しました')),
-          );
-        }
-      });
-      reader.readAsDataUrl(files[0]);
-    });
-  }
-
-  void _showPhotoPreview(String base64Image) {
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Image.memory(base64Decode(base64Image.split(',').last)),
-            ),
-            Positioned(
-              right: 8,
-              top: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.black54),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showWorkReedDialog({WorkReed? existingReed}) {
@@ -795,85 +742,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
     );
   }
 
-  void _showEditLogDialog(WorkReed reed, ScrapeLog log) {
-    final dateController = TextEditingController(text: log.date);
-    final lengthController = TextEditingController(text: log.cuttingLength ?? '');
-    final resistanceController = TextEditingController(text: log.resistanceRating ?? '');
-    final pitchController = TextEditingController(text: log.pitchRating ?? '');
-    final memoController = TextEditingController(text: log.memo ?? '');
-    int editLevel = log.level ?? reed.qualityLevel;
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setEditState) {
-            return AlertDialog(
-              title: const Text('ログを編集'),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: 400,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(controller: dateController, decoration: const InputDecoration(labelText: '日付')),
-                      TextField(controller: lengthController, decoration: const InputDecoration(labelText: '全長 (mm)')),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          const Text('レベル: '),
-                          const SizedBox(width: 8),
-                          DropdownButton<int>(
-                            value: editLevel,
-                            items: List.generate(6, (i) => i).reversed.map((lvl) {
-                              return DropdownMenuItem(
-                                value: lvl,
-                                child: Text(lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}'),
-                              );
-                            }).toList(),
-                            onChanged: (val) {
-                              if (val != null) {
-                                setEditState(() => editLevel = val);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      TextField(controller: resistanceController, decoration: const InputDecoration(labelText: '抵抗感')),
-                      TextField(controller: pitchController, decoration: const InputDecoration(labelText: 'ピッチ')),
-                      const SizedBox(height: 8),
-                      TextField(controller: memoController, decoration: const InputDecoration(labelText: 'メモ', border: OutlineInputBorder()), maxLines: 3),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
-                ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      log.date = dateController.text;
-                      log.level = editLevel;
-                      log.cuttingLength = lengthController.text;
-                      log.resistanceRating = resistanceController.text;
-                      log.pitchRating = pitchController.text;
-                      log.memo = memoController.text;
-                    });
-                    _saveWorkReeds();
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                    _showLogHistoryDialog(reed);
-                  },
-                  child: const Text('更新'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   void _showLogHistoryDialog(WorkReed reed) {
     showDialog(
       context: context,
@@ -922,22 +790,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                                           ],
                                         ],
                                       ),
-                                      Row(
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit, size: 18, color: Colors.blueGrey),
-                                            onPressed: () => _showEditLogDialog(reed, log),
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete_outline, size: 18, color: Colors.redAccent),
-                                            onPressed: () {
-                                              setState(() { reed.logs.remove(log); });
-                                              setHistoryState(() {});
-                                              _saveWorkReeds();
-                                            },
-                                          ),
-                                        ],
-                                      ),
                                     ],
                                   ),
                                   if (log.resistanceRating != null && log.resistanceRating!.isNotEmpty)
@@ -967,12 +819,10 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 1. レベル絞り込み
     List<WorkReed> filteredReeds = _workReeds.where((reed) {
       return _selectedLevels.contains(reed.qualityLevel);
     }).toList();
 
-    // 2. テキスト検索絞り込み (SearchQueryParser 対応)
     if (_searchQuery.trim().isNotEmpty) {
       final matcher = SearchQueryParser.compile(_searchQuery);
       filteredReeds = filteredReeds.where((reed) {
@@ -985,7 +835,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
       }).toList();
     }
 
-    // 3. ソート処理
     filteredReeds.sort((a, b) {
       switch (_sortOrder) {
         case 'log_date_desc':
@@ -1067,14 +916,12 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
       ),
       body: Column(
         children: [
-          // --- 検索バー & フィルターコントロール領域 ---
           Container(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             color: Colors.grey.shade100,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 検索フィールド
                 TextField(
                   controller: _searchController,
                   decoration: InputDecoration(
@@ -1099,11 +946,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                   },
                 ),
                 const SizedBox(height: 10),
-                // レベル選択 FilterChips & ソート切り替え
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // レベルチップ
                     Expanded(
                       child: Wrap(
                         spacing: 6,
@@ -1120,7 +965,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                                 if (selected) {
                                   _selectedLevels.add(lvl);
                                 } else {
-                                  // すべて外れてしまうのを防ぐ場合は制御可能
                                   if (_selectedLevels.length > 1) {
                                     _selectedLevels.remove(lvl);
                                   }
@@ -1131,11 +975,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                         }).toList(),
                       ),
                     ),
-                    // 全選択 / 全解除ボタンなどが必要であればここに追加可能
                   ],
                 ),
                 const SizedBox(height: 4),
-                // ソート選択バー
                 Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
@@ -1164,8 +1006,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
               ],
             ),
           ),
-
-          // --- ヒット件数表示 ---
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
@@ -1179,8 +1019,6 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
               ],
             ),
           ),
-
-          // --- リードリスト本体 ---
           Expanded(
             child: filteredReeds.isEmpty
                 ? Center(
@@ -1197,282 +1035,235 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                     itemBuilder: (context, index) {
                       final reed = filteredReeds[index];
 
-                      // 対応するチューブ情報を取得
                       final staple = _stapleStocks.firstWhere(
                         (s) => s.id == reed.stapleId,
                         orElse: () => StapleStock(id: '', model: '', length: '', mark: ''),
                       );
 
-                      return Card(
-                        elevation: 2,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // 1行目：チューブ情報 + カスタムマーク + ケーンタイトル + IDリンク
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Expanded(
-                                    child: Wrap(
-                                      crossAxisAlignment: WrapCrossAlignment.center,
-                                      spacing: 8,
-                                      children: [
-                                        Text(
-                                          '${staple.model} ${staple.length}${staple.mark}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
-                                        ),
-                                        if (reed.customTag != null && reed.customTag!.isNotEmpty) ...[
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                            decoration: BoxDecoration(
-                                              color: Colors.blue.shade100,
-                                              borderRadius: BorderRadius.circular(4),
-                                            ),
-                                            child: Text(
-                                              'No. ${reed.customTag}',
-                                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
-                                            ),
+                      return InkWell(
+                        onTap: () async {
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ReedDetailPage(
+                                reed: reed,
+                                onUpdated: (updatedReed) {
+                                  setState(() {
+                                    int idx = _workReeds.indexWhere((r) => r.id == updatedReed.id);
+                                    if (idx != -1) {
+                                      _workReeds[idx] = updatedReed;
+                                    }
+                                  });
+                                  _saveWorkReeds();
+                                },
+                              ),
+                            ),
+                          );
+                          _loadWorkReeds();
+                        },
+                        child: Card(
+                          elevation: 2,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(16.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(
+                                      child: Wrap(
+                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                        spacing: 8,
+                                        children: [
+                                          Text(
+                                            '${staple.model} ${staple.length}${staple.mark}',
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.deepOrange),
                                           ),
+                                          if (reed.customTag != null && reed.customTag!.isNotEmpty) ...[
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade100,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'No. ${reed.customTag}',
+                                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900, fontSize: 13),
+                                              ),
+                                            ),
+                                          ],
+                                          Text(
+                                            reed.shapedTitle,
+                                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                          ),
+                                          if (reed.id.isNotEmpty) ...[
+                                            const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                                            ReedIdUtils.buildClickableIdParts(context, reed.id, null),
+                                            const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
+                                          ],
                                         ],
-                                        Text(
-                                          reed.shapedTitle,
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                      ),
+                                    ),
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
+                                          tooltip: 'リード情報を編集',
+                                          onPressed: () => _showWorkReedDialog(existingReed: reed),
                                         ),
-                                        if (reed.id.isNotEmpty) ...[
-                                          const Text('(', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                                          ReedIdUtils.buildClickableIdParts(context, reed.id, null),
-                                          const Text(')', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black54)),
-                                        ],
+                                        IconButton(
+                                          icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                          tooltip: 'リードを削除',
+                                          onPressed: () => _confirmAndDeleteReed(reed),
+                                        ),
                                       ],
                                     ),
-                                  ),
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey),
-                                        tooltip: 'リード情報を編集',
-                                        onPressed: () => _showWorkReedDialog(existingReed: reed),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
-                                        tooltip: 'リードを削除',
-                                        onPressed: () => _confirmAndDeleteReed(reed),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              
-                              const SizedBox(height: 6),
-
-                              // 2行目：糸の種類、糸の色、ラベルレベル、今の長さ、登録日
-                              Wrap(
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 8,
-                                runSpacing: 4,
-                                children: [
-                                  Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                                  
-                                  if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
-                                    const Text('| 糸:'),
-                                    Container(
-                                      width: 10,
-                                      height: 10,
-                                      decoration: BoxDecoration(
-                                        color: getThreadColor(reed.threadColor),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
                                   ],
-
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.shade50,
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.amber.shade300),
-                                    ),
-                                    child: DropdownButton<int>(
-                                      value: reed.qualityLevel,
-                                      isDense: true,
-                                      underline: const SizedBox.shrink(),
-                                      items: List.generate(6, (i) => i).reversed.map((lvl) {
-                                        return DropdownMenuItem(
-                                          value: lvl,
-                                          child: Text(
-                                            lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}',
-                                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
-                                          ),
-                                        );
-                                      }).toList(),
-                                      onChanged: (newLevel) {
-                                        if (newLevel != null) {
-                                          if (newLevel == 0) {
-                                            _confirmAndDismantle(reed);
-                                          } else {
-                                            setState(() {
-                                              reed.qualityLevel = newLevel;
-                                            });
-                                            _saveWorkReeds();
+                                ),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  spacing: 8,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text('種類: ${reed.threadMaterial ?? "ナイロン"}', style: const TextStyle(fontSize: 13, color: Colors.black87)),
+                                    if (reed.threadColor != null && reed.threadColor!.isNotEmpty) ...[
+                                      const Text('| 糸:'),
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: getThreadColor(reed.threadColor),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      Text(reed.threadColor!, style: const TextStyle(fontSize: 13)),
+                                    ],
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade50,
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: Colors.amber.shade300),
+                                      ),
+                                      child: DropdownButton<int>(
+                                        value: reed.qualityLevel,
+                                        isDense: true,
+                                        underline: const SizedBox.shrink(),
+                                        items: List.generate(6, (i) => i).reversed.map((lvl) {
+                                          return DropdownMenuItem(
+                                            value: lvl,
+                                            child: Text(
+                                              lvl == 0 ? 'Lv.0 (分解)' : 'Lv.$lvl ${"★" * lvl}',
+                                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: lvl == 0 ? Colors.red : Colors.amber.shade900),
+                                            ),
+                                          );
+                                        }).toList(),
+                                        onChanged: (newLevel) {
+                                          if (newLevel != null) {
+                                            if (newLevel == 0) {
+                                              _confirmAndDismantle(reed);
+                                            } else {
+                                              setState(() {
+                                                reed.qualityLevel = newLevel;
+                                              });
+                                              _saveWorkReeds();
+                                            }
                                           }
-                                        }
-                                      },
+                                        },
+                                      ),
                                     ),
-                                  ),
-
-                                  Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
-                                  Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
-                                ],
-                              ),
-
-                              const SizedBox(height: 12),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Wrap(
-                                      spacing: 8,
-                                      runSpacing: 8,
-                                      children: [
-                                        for (int i = 0; i < reed.photosBase64.length; i++)
-                                          Stack(
+                                    Text('| 長さ: ${reed.cuttingLength}mm', style: const TextStyle(fontSize: 13)),
+                                    Text('| 登録日: ${reed.tiedDate}', style: const TextStyle(fontSize: 13, color: Colors.black54)),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                if (reed.logs.isNotEmpty) ...[
+                                  InkWell(
+                                    onTap: () => _showLogHistoryDialog(reed),
+                                    borderRadius: BorderRadius.circular(6),
+                                    child: Container(
+                                      width: double.infinity,
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        color: Colors.amber.shade50,
+                                        border: Border.all(color: Colors.amber.shade300),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                             children: [
-                                              InkWell(
-                                                onTap: () => _showPhotoPreview(reed.photosBase64[i]),
-                                                child: ClipRRect(
-                                                  borderRadius: BorderRadius.circular(6),
-                                                  child: Image.memory(
-                                                    base64Decode(reed.photosBase64[i].split(',').last),
-                                                    width: 60,
-                                                    height: 60,
-                                                    fit: BoxFit.cover,
-                                                  ),
+                                              Text(
+                                                '最新ログ (${reed.logs.first.date})',
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                  color: Colors.amber.shade900,
                                                 ),
                                               ),
-                                              Positioned(
-                                                right: 0,
-                                                top: 0,
-                                                child: InkWell(
-                                                  onTap: () {
-                                                    setState(() {
-                                                      reed.photosBase64.removeAt(i);
-                                                    });
-                                                    _saveWorkReeds();
-                                                  },
-                                                  child: Container(
-                                                    decoration: const BoxDecoration(
-                                                      color: Colors.black54,
-                                                      shape: BoxShape.circle,
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    '全 ${reed.logs.length} 件',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 12,
+                                                      color: Colors.amber.shade900,
                                                     ),
-                                                    padding: const EdgeInsets.all(2),
-                                                    child: const Icon(Icons.close, size: 14, color: Colors.white),
                                                   ),
-                                                ),
+                                                  const SizedBox(width: 4),
+                                                  const Icon(Icons.open_in_full, size: 14, color: Colors.amber),
+                                                ],
                                               ),
                                             ],
                                           ),
-                                        OutlinedButton.icon(
-                                          style: OutlinedButton.styleFrom(
-                                            minimumSize: const Size(60, 60),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                                          ),
-                                          icon: const Icon(Icons.add_a_photo, size: 18),
-                                          label: const Text('写真追加', style: TextStyle(fontSize: 11)),
-                                          onPressed: () => _pickAndAddPhoto(reed),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 4),
+                                          if (reed.logs.first.resistanceRating != null && reed.logs.first.resistanceRating!.isNotEmpty)
+                                            Text(
+                                              '抵抗感: ${reed.logs.first.resistanceRating}',
+                                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                            ),
+                                          if (reed.logs.first.pitchRating != null && reed.logs.first.pitchRating!.isNotEmpty)
+                                            Text(
+                                              'ピッチ: ${reed.logs.first.pitchRating}',
+                                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                            ),
+                                          if (reed.logs.first.memo != null && reed.logs.first.memo!.isNotEmpty)
+                                            Text(
+                                              reed.logs.first.memo!,
+                                              style: const TextStyle(fontSize: 13, color: Colors.black87),
+                                              maxLines: 2,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                        ],
+                                      ),
                                     ),
+                                  ),
+                                ] else ...[
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                                    child: Text('調整ログはまだありません', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                                   ),
                                 ],
-                              ),
-                              const SizedBox(height: 12),
-                              if (reed.logs.isNotEmpty) ...[
-                                InkWell(
-                                  onTap: () => _showLogHistoryDialog(reed),
-                                  borderRadius: BorderRadius.circular(6),
-                                  child: Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.shade50,
-                                      border: Border.all(color: Colors.amber.shade300),
-                                      borderRadius: BorderRadius.circular(6),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              '最新ログ (${reed.logs.first.date})',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                                color: Colors.amber.shade900,
-                                              ),
-                                            ),
-                                            Row(
-                                              children: [
-                                                Text(
-                                                  '全 ${reed.logs.length} 件',
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.bold,
-                                                    fontSize: 12,
-                                                    color: Colors.amber.shade900,
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 4),
-                                                const Icon(Icons.open_in_full, size: 14, color: Colors.amber),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        if (reed.logs.first.resistanceRating != null && reed.logs.first.resistanceRating!.isNotEmpty)
-                                          Text(
-                                            '抵抗感: ${reed.logs.first.resistanceRating}',
-                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                          ),
-                                        if (reed.logs.first.pitchRating != null && reed.logs.first.pitchRating!.isNotEmpty)
-                                          Text(
-                                            'ピッチ: ${reed.logs.first.pitchRating}',
-                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                          ),
-                                        if (reed.logs.first.memo != null && reed.logs.first.memo!.isNotEmpty)
-                                          Text(
-                                            reed.logs.first.memo!,
-                                            style: const TextStyle(fontSize: 13, color: Colors.black87),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                      ],
-                                    ),
+                                const Divider(height: 20),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: ElevatedButton.icon(
+                                    onPressed: () => _showAddLogDialog(reed),
+                                    icon: const Icon(Icons.note_add, size: 18),
+                                    label: const Text('ログ追加'),
                                   ),
                                 ),
-                              ] else ...[
-                                Container(
-                                  width: double.infinity,
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                                  child: Text('調整ログはまだありません', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                ),
                               ],
-                              const Divider(height: 20),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: ElevatedButton.icon(
-                                  onPressed: () => _showAddLogDialog(reed),
-                                  icon: const Icon(Icons.note_add, size: 18),
-                                  label: const Text('ログ追加'),
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
                       );
