@@ -112,7 +112,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     if (rawJson == null || rawJson.isEmpty) return [];
     try {
       dynamic decoded = jsonDecode(rawJson);
-      // 二重シリアライズ（文字列の中にJSON文字列が入っている状態）を安全に解除
       if (decoded is String) {
         decoded = jsonDecode(decoded);
       }
@@ -280,6 +279,13 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       currentWorkReeds.add(newWorkReed);
       await prefs.setString('work_leads_data', jsonEncode(currentWorkReeds.map((e) => e.toJson()).toList()));
     }
+
+    // ★ チューブのステータスを確実に「糸巻き済み」に設定して保存
+    final stapleIndex = stapleStocks.indexWhere((s) => s.id == tied.stapleId);
+    if (stapleIndex != -1) {
+      stapleStocks[stapleIndex].status = StapleStatus.tied;
+    }
+    await _saveData();
 
     await _loadWorkingReedIds();
 
@@ -544,7 +550,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           preferredSize: const Size.fromHeight(96),
           child: Column(
             children: [
-              // 検索バー
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
                 child: TextField(
@@ -577,7 +582,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                   onChanged: (val) => setState(() => _searchQuery = val),
                 ),
               ),
-              // タブバー
               TabBar(
                 controller: _tabController,
                 isScrollable: true,
@@ -757,7 +761,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
         ? items.where((e) => getCount(e) > 0).toList() 
         : List.from(items);
     
-    // 検索フィルタ
     if (_searchQuery.trim().isNotEmpty) {
       final matcher = SearchQueryParser.compile(_searchQuery);
       filteredItems = filteredItems.where((e) => matcher(getSearchText(e))).toList();
@@ -1035,7 +1038,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
           availableStaples: availableStaples,
           onProcessed: (newTied, selectedStaple) async {
             setState(() {
-              _tiedStocks.insert(0, newTied); // 新しいものを先頭に追加
+              _tiedStocks.insert(0, newTied);
               item.remainingCount--;
               selectedStaple.status = StapleStatus.tied;
             });
@@ -1084,7 +1087,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       items = items.where((e) => e.status == StapleStatus.unused).toList();
     }
 
-    // 検索フィルタ
     if (_searchQuery.trim().isNotEmpty) {
       final matcher = SearchQueryParser.compile(_searchQuery);
       items = items.where((e) => matcher(e.searchText)).toList();
@@ -1272,7 +1274,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
   Widget _buildTiedStockTab() {
     List<TiedStock> sortedItems = List.from(_tiedStocks);
 
-    // 検索フィルタ（チューブ情報も含む）
     if (_searchQuery.trim().isNotEmpty) {
       final matcher = SearchQueryParser.compile(_searchQuery);
       sortedItems = sortedItems.where((item) {
@@ -1461,7 +1462,14 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                       icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
                                       tooltip: '糸巻きストックを削除',
                                       onPressed: () => _confirmDelete(() {
-                                        setState(() => _tiedStocks.remove(item));
+                                        setState(() {
+                                          _tiedStocks.remove(item);
+                                          // ★ 削除時に紐づくチューブのステータスを「未使用」に自動で戻す
+                                          final stapleIndex = stapleStocks.indexWhere((s) => s.id == item.stapleId);
+                                          if (stapleIndex != -1) {
+                                            stapleStocks[stapleIndex].status = StapleStatus.unused;
+                                          }
+                                        });
                                         _saveData();
                                       }),
                                     ),
