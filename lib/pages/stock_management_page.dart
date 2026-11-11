@@ -257,6 +257,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       final newWorkReed = WorkReed(
         id: tied.id,
         stapleId: tied.stapleId,
+        // ★ TiedStockが持つ正確なケーン側のコードとタイトルを確実に渡す
         shapedCode: tied.shapedCode,
         shapedTitle: tied.shapedTitle,
         tiedDate: tied.tiedDate,
@@ -280,7 +281,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
       await prefs.setString('work_leads_data', jsonEncode(currentWorkReeds.map((e) => e.toJson()).toList()));
     }
 
-    // ★ チューブのステータスを確実に「糸巻き済み」に設定して保存
+    // チューブのステータスを確実に「糸巻き済み」に設定して保存
     final stapleIndex = stapleStocks.indexWhere((s) => s.id == tied.stapleId);
     if (stapleIndex != -1) {
       stapleStocks[stapleIndex].status = StapleStatus.tied;
@@ -1464,7 +1465,6 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
                                       onPressed: () => _confirmDelete(() {
                                         setState(() {
                                           _tiedStocks.remove(item);
-                                          // ★ 削除時に紐づくチューブのステータスを「未使用」に自動で戻す
                                           final stapleIndex = stapleStocks.indexWhere((s) => s.id == item.stapleId);
                                           if (stapleIndex != -1) {
                                             stapleStocks[stapleIndex].status = StapleStatus.unused;
@@ -1554,7 +1554,7 @@ class _MainStockNavigationPageState extends State<MainStockNavigationPage>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('ストックの削除'),
+        title: const Text('ストックの登録解除'),
         content: const Text('このストック項目を完全に削除しますか？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),

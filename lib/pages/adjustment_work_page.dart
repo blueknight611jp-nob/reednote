@@ -311,14 +311,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
     String totalLength = existingReed?.cuttingLength ?? '71.0';
     List<String> photos = existingReed != null ? List.from(existingReed.photosBase64) : [];
 
-    final lengthController = TextEditingController(
-      text: existingReed != null && existingReed.shapedTitle.contains('mm') 
-          ? RegExp(r'(\d+)mm').firstMatch(existingReed.shapedTitle)?.group(1) ?? '46'
-          : '46'
-    );
+    final lengthController = TextEditingController(text: '46');
     final markController = TextEditingController(text: 'a');
     final totalLengthController = TextEditingController(text: totalLength);
     final memoController = TextEditingController();
+
+    // ★ ダイレクト登録時用のケーンタイトル入力用コントローラーを追加
+    final shapedTitleController = TextEditingController(
+      text: existingReed?.shapedTitle ?? 'Gonzalez 2026/04 (ダイレクト登録)'
+    );
 
     final List<String> threadTypes = ['ナイロン', 'ポリエステル', '絹'];
     final List<String> threadColors = ['黒', '紫', '橙', '赤', '桃', '黄', '緑', '青', '白'];
@@ -416,6 +417,15 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                       ),
                       const SizedBox(height: 6),
                       Text('マーク表記: $previewId', style: TextStyle(fontSize: 12, color: Colors.amber.shade900, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      // ★ ケーン情報（shapedTitle）を正しく入力・保持できるように修正
+                      TextField(
+                        controller: shapedTitleController,
+                        decoration: const InputDecoration(
+                          labelText: 'ケーン情報 (例: Gon202501T-0.58-H39)',
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
                       const SizedBox(height: 12),
                       Row(
                         children: [
@@ -567,7 +577,9 @@ class _AdjustmentWorkPageState extends State<AdjustmentWorkPage> {
                 ElevatedButton(
                   onPressed: () async {
                     final dateStr = DateTime.now().toString().split(' ')[0];
-                    final shapedTitleText = '$selectedModel ${lengthController.text}mm';
+                    final shapedTitleText = shapedTitleController.text.trim().isEmpty
+                        ? 'Gon202501T-0.58-H39'
+                        : shapedTitleController.text.trim();
                     final combinedThreadColor = '$selectedType$selectedColor';
                     final customTagText = customTagController.text.trim().isEmpty 
                         ? null 
